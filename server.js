@@ -2,7 +2,7 @@
 import http from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { EventStore, StoreError } from './src/store.js';
 import { SandboxChannel } from './src/payments.js';
 import { createQuote } from './src/pricing.js';
@@ -13,7 +13,7 @@ import { openDecision, executeRefundChoice, executeVoucherChoice, executeReplace
 import { previewSettlement } from './src/settlement.js';
 import { PRICE_TABLES, PRICE_TABLE_VERSION } from './src/config.js';
 
-const PUBLIC_DIR = join(dirname(pathToFileURL(import.meta.url).pathname), 'public');
+const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
 export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulateFail = [], log = (...a) => console.log(...a) } = {}) {
