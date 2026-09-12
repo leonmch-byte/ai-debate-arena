@@ -159,7 +159,7 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
     res.end(readFileSync(p));
   });
   await new Promise(r => server.listen(port, r));
-  return { server, store, close: () => new Promise(r => server.close(() => { store.close(); r(); })) };
+  return { server, store, close: async () => { server.closeAllConnections?.(); await new Promise(r => server.close(() => { store.close(); r(); })); } };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
