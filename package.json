@@ -1,0 +1,11 @@
+{
+  "name": "ai-debate-arena",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "多模型交叉评审平台 v3：协议驱动的权益/履约/结算体系",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "engines": { "node": ">=22.13" }
+}
