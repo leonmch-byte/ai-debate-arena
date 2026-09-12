@@ -34,6 +34,7 @@ export class EventStore {
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
     this.db.exec('PRAGMA journal_mode = WAL');
+    this.db.exec('PRAGMA busy_timeout = 5000');   // server/worker 双进程共享库（WAL）
     this.#initSchema();
   }
 
