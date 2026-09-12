@@ -21,7 +21,7 @@ const EVENT_TYPES = new Set([
   'VOUCHER_ISSUED', 'VOUCHER_RESERVED', 'VOUCHER_REDEEMED', 'VOUCHER_RELEASED', 'VOUCHER_EXPIRED',
   'SETTLEMENT_PREVIEWED', 'SETTLEMENT_FINALIZED',
   'OBJECTION_RAISED', 'OBJECTION_RESOLVED',
-  'LEDGER_CORRECTION', 'SURCHARGE_EXPIRED',
+  'LEDGER_CORRECTION', 'SURCHARGE_EXPIRED', 'ADMIN_ACTION',
 ]);
 const DECISION_SOURCES = new Set(['SYSTEM_RULE', 'USER_DECISION', 'TIMEOUT_RULE', 'HUMAN_EXCEPTION']);
 
@@ -55,6 +55,7 @@ export class EventStore {
         UNIQUE(order_id, seq)
       );
       CREATE INDEX IF NOT EXISTS idx_events_order ON events(order_id, seq);
+      CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
       CREATE TABLE IF NOT EXISTS operations (
         operation_id  TEXT PRIMARY KEY,
         order_id      TEXT NOT NULL,
@@ -177,6 +178,21 @@ export class EventStore {
 
   getOperationsByOrder(orderId) {
     return this.db.prepare('SELECT * FROM operations WHERE order_id = ? ORDER BY created_at').all(orderId);
+  }
+
+  getEventsByType(type) {
+    return this.db.prepare('SELECT payload FROM events WHERE type = ? ORDER BY occurred_at, rowid')
+      .all(type).map(r => JSON.parse(r.payload));
+  }
+
+  getAllOrderIds() {
+    const a = this.db.prepare('SELECT DISTINCT order_id AS id FROM events').all();
+    const b = this.db.prepare('SELECT DISTINCT order_id AS id FROM operations').all();
+    return [...new Set([...a, ...b].map(r => r.id))];
+  }
+
+  getAllOperations() {
+    return this.db.prepare('SELECT * FROM operations ORDER BY created_at').all();
   }
 
   close() { this.db.close(); }
