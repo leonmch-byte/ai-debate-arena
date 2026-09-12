@@ -1,6 +1,6 @@
 // M2：服务项状态机（§3.1）、订单状态投影（§3.2）、事件准入守卫（§3.3）
 // 原则：状态永远是事件流的推导值。本模块只读事件、推导状态、拒绝违规，不存在"写状态"。
-// M2-fix：REPLACED 推导改为逐事件刷新，守卫判定候选事件时可见最新推导态。
+// 演进：M2-fix 逐事件推导 REPLACED；M4 落 T1 支付前置；M5-fix 退款决策/类型双重校验。
 import { StoreError } from './store.js';
 
 export const ITEM_TERMINAL = new Set([
@@ -174,10 +174,12 @@ export function projectItems(events) {
             throw new StoreError('TIMEOUT_PATH_INVALID', '超时退款必须有 DECISION_TIMEOUT 或补差窗口过期（T10/T12）');
           it.state = 'TIMEOUT_REFUNDED';     // T10 / T12→T10
         } else {
+          if (!d.received)
+            throw new StoreError('REFUND_WITHOUT_DECISION', '用户退款必须有 REFUND 决策（§4.5）');
           const kind = p.kind ?? 'FULL_REFUND';
-          if (d.received?.choice === 'REFUND' && kind === 'FULL_REFUND') {
+          if (d.received.choice === 'REFUND' && kind === 'FULL_REFUND') {
             it.state = 'REFUNDED';           // T7
-          } else if (d.received?.choice === 'REPLACE' && kind === 'REPLACE_DELTA_REFUND') {
+          } else if (d.received.choice === 'REPLACE' && kind === 'REPLACE_DELTA_REFUND') {
             break;                           // 退差不改前驱状态；T9 由后继锁定派生（§2.5）
           } else {
             throw new StoreError('REFUND_KIND_MISMATCH', '退款类型与决策不匹配（§4.5）');

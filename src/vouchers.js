@@ -1,4 +1,5 @@
-// §6：券余额从事件流推导。I7：face = remaining + redeemed + reserved(占用中) + expired（released 回冲 reserved）。
+// §6：券余额从事件流推导。
+// I7：face = remaining + redeemed + reserved + expired；核销是预占→已核销的转移（§6.2）。
 export function projectVouchers(events) {
   const v = new Map();
   const ensure = id => {
@@ -20,7 +21,7 @@ export function projectVouchers(events) {
       }
       case 'VOUCHER_RESERVED':   { const x = ensure(d.voucher_id); x.reserved_cents += d.reserved_cents; x.remaining_cents -= d.reserved_cents; break; }
       case 'VOUCHER_RELEASED':   { const x = ensure(d.voucher_id); x.reserved_cents -= d.released_cents; x.remaining_cents += d.released_cents; break; }
-      case 'VOUCHER_REDEEMED':   { const x = ensure(d.voucher_id); x.redeemed_cents += d.applied_cents; break; }
+      case 'VOUCHER_REDEEMED':   { const x = ensure(d.voucher_id); x.reserved_cents -= d.applied_cents; x.redeemed_cents += d.applied_cents; break; }
       case 'VOUCHER_EXPIRED':    { const x = ensure(d.voucher_id); x.expired_cents += x.remaining_cents; x.remaining_cents = 0; break; }
       default: break;
     }

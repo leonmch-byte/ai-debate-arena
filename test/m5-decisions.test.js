@@ -67,6 +67,7 @@ test('M5-3 选退款：现金单退现金 / 纯券单发补偿券（T7/§2.4/§5
     const { store, dir, orderId, items } = await paidOrder(['qwen-max']);
     const it = items[0].item_id;
     await failItem(store, orderId, it, 'qwen-max');
+    openDecision(store, orderId, it);
     const r = await executeRefundChoice(store, orderId, it, new SandboxChannel());
     assert.equal(r.refunded_cash_cents, 800);
     const h = store.getOrder(orderId);
@@ -81,6 +82,7 @@ test('M5-3 选退款：现金单退现金 / 纯券单发补偿券（T7/§2.4/§5
     const { store, dir, orderId, items } = await paidOrder(['kimi'], [vch]);
     const it = items[0].item_id;
     await failItem(store, orderId, it, 'kimi');
+    openDecision(store, orderId, it);
     const r = await executeRefundChoice(store, orderId, it, new SandboxChannel());
     assert.equal(r.refunded_cash_cents, 0);
     assert.equal(r.credit_cents, 800);
@@ -108,28 +110,28 @@ test('M5-4 换贵模型：补差200→后继锁定→履约→REPLACED，E1=0（
   const h2 = store.getOrder(orderId);
   assert.equal(projectOrder(h2), 'DELIVERED');
   const e1 = E1(h2);
-  assert.equal(e1.paid_cash_cents, 1000);   // 800 + 补差 200
+  assert.equal(e1.paid_cash_cents, 1000);     // 800 + 补差 200
   assert.equal(e1.expected_cash_cents, 1000); // 后继 cash
   assert.equal(e1.diff, 0);
   cleanup(store, dir);
 });
 
-test('M5-5 换便宜模型：自动退差200→后继履约→REPLACED，E1=0（§2.5）', async () => {
+test('M5-5 换便宜模型：自动退差400→后继履约→REPLACED，E1=0（§2.5）', async () => {
   const { store, dir, orderId, items } = await paidOrder(['gpt-4o']);
   const it = items[0].item_id;
   await failItem(store, orderId, it, 'gpt-4o');
   openDecision(store, orderId, it);
   const r = await executeReplaceChoice(store, orderId, it, 'deepseek-v3', new SandboxChannel());
-  assert.equal(r.carryover.cash_delta_cents, -200);
+  assert.equal(r.carryover.cash_delta_cents, -400);   // 1000 → 600
   const h1 = store.getOrder(orderId);
-  assert.ok(h1.some(e => e.type === 'REFUND_EXECUTED' && e.amount_cents === 200 && e.data.kind === 'REPLACE_DELTA_REFUND'));
+  assert.ok(h1.some(e => e.type === 'REFUND_EXECUTED' && e.amount_cents === 400 && e.data.kind === 'REPLACE_DELTA_REFUND'));
   assert.equal(projectItems(h1).get(it).state, 'REPLACED');
   await fulfillItem(store, orderId, r.successor_item_id, 'deepseek-v3', new OkAdapter('res_ds'), { backoffMs: 0 });
   const h2 = store.getOrder(orderId);
   assert.equal(projectOrder(h2), 'DELIVERED');
   const e1 = E1(h2);
   assert.equal(e1.paid_cash_cents, 1000);
-  assert.equal(e1.refunded_cash_cents, 200);
+  assert.equal(e1.refunded_cash_cents, 400);
   assert.equal(e1.diff, 0);
   cleanup(store, dir);
 });
@@ -183,10 +185,11 @@ test('M5-8 券换便宜模型：券溢余200发回 + E1=0（券8→6 场景）',
   cleanup(store, dir);
 });
 
-test('M5-9 退款渠道失败→重试：新 operation 成功，义务只生效一次（I2/§5.4）', async () => {
+test('M5-9 退款渠道失败→重试：复用义务新 operation 成功，义务只生效一次（I2/§5.4）', async () => {
   const { store, dir, orderId, items } = await paidOrder(['qwen-max']);
   const it = items[0].item_id;
   await failItem(store, orderId, it, 'qwen-max');
+  openDecision(store, orderId, it);
   const ch = new SandboxChannel(['FAILED']);
   await assert.rejects(() => executeRefundChoice(store, orderId, it, ch), e => e.code === 'REFUND_STUCK');
   const { applyFullRefund } = await import('../src/refunds.js');
@@ -206,12 +209,13 @@ test('M5-10 券账本 I7：多来源券全生命周期守恒（§6.7）', async 
   const { store, dir, orderId, items } = await paidOrder(['kimi'], [vch]);
   const it = items[0].item_id;
   await failItem(store, orderId, it, 'kimi');
+  openDecision(store, orderId, it);
   executeVoucherChoice(store, orderId, it);
   const events = [
     { type: 'VOUCHER_ISSUED', data: { voucher_id: 'vch_m5c', source: 'MANUAL', face_value_cents: 800 } },
     ...store.getOrder(orderId),
   ];
-  assertI7(events); // face 800 = redeemed 800（原券）；新券 face 800 = remaining 800
+  assertI7(events); // 原券 face 800 = redeemed 800；新券 face 800 = remaining 800
   const v = (await import('../src/vouchers.js')).projectVouchers(events);
   assert.equal(v.get('vch_m5c').redeemed_cents, 800);
   cleanup(store, dir);
