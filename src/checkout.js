@@ -57,7 +57,7 @@ export async function confirmPayment(store, orderId, { channel, vouchers = [], n
 
   const confirmedItems = q.data.items.map(it => ({
     ...it,
-    funding_split: funding.find(f => f.item_id === it.item_id),
+    funding_split: (({ item_id: _fid, ...rest }) => rest)(funding.find(f => f.item_id === it.item_id)),
   }));
   const perVoucher = new Map();
   for (const f of funding)
