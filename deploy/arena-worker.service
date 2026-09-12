@@ -1,0 +1,15 @@
+[Unit]
+Description=ai-debate-arena v3 worker (jobs + reconciliation)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ai-debate-arena-v3
+ExecStart=/home/ubuntu/.nvm/versions/node/v22.23.2/bin/node worker.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
