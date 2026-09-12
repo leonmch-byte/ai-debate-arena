@@ -20,6 +20,45 @@ export class SandboxChannel {
     const r = { state: 'SUCCEEDED', channel_ref: this.#ref(operation_id) };
     this.resolved.set(operation_id, r); return r;
   }
+  async refund({ operation_id, amount_cents }) {
+    if (this.resolved.has(operation_id)) return this.resolved.get(operation_id);
+    this.calls.push({ operation_id, amount_cents });
+    const outcome = this.script.length ? this.script.shift() : 'SUCCEEDED';
+    if (outcome === 'UNKNOWN') { this.pending.set(operation_id, { amount_cents }); return { state: 'UNKNOWN' }; }
+    if (outcome === 'FAILED') {
+      const r = { state: 'FAILED', channel_ref: null };
+      this.resolved.set(operation_id, r); return r;
+    }
+    const r = { state: 'SUCCEEDED', channel_ref: this.#ref(operation_id) };
+    this.resolved.set(operation_id, r); return r;
+  }
+
+  async refund({ operation_id, amount_cents }) {
+    if (this.resolved.has(operation_id)) return this.resolved.get(operation_id);
+    this.calls.push({ operation_id, amount_cents });
+    const outcome = this.script.length ? this.script.shift() : 'SUCCEEDED';
+    if (outcome === 'UNKNOWN') { this.pending.set(operation_id, { amount_cents }); return { state: 'UNKNOWN' }; }
+    if (outcome === 'FAILED') {
+      const r = { state: 'FAILED', channel_ref: null };
+      this.resolved.set(operation_id, r); return r;
+    }
+    const r = { state: 'SUCCEEDED', channel_ref: this.#ref(operation_id) };
+    this.resolved.set(operation_id, r); return r;
+  }
+
+  async refund({ operation_id, amount_cents }) {
+    if (this.resolved.has(operation_id)) return this.resolved.get(operation_id);
+    this.calls.push({ operation_id, amount_cents });
+    const outcome = this.script.length ? this.script.shift() : 'SUCCEEDED';
+    if (outcome === 'UNKNOWN') { this.pending.set(operation_id, { amount_cents }); return { state: 'UNKNOWN' }; }
+    if (outcome === 'FAILED') {
+      const r = { state: 'FAILED', channel_ref: null };
+      this.resolved.set(operation_id, r); return r;
+    }
+    const r = { state: 'SUCCEEDED', channel_ref: this.#ref(operation_id) };
+    this.resolved.set(operation_id, r); return r;
+  }
+
   // 主动查询通道（§5.2 双通道）：沙箱里 UNKNOWN 一查即定案
   async resolve(operation_id) {
     if (!this.pending.has(operation_id))

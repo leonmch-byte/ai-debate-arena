@@ -174,9 +174,14 @@ export function projectItems(events) {
             throw new StoreError('TIMEOUT_PATH_INVALID', '超时退款必须有 DECISION_TIMEOUT 或补差窗口过期（T10/T12）');
           it.state = 'TIMEOUT_REFUNDED';     // T10 / T12→T10
         } else {
-          if (d.received?.choice !== 'REFUND')
-            throw new StoreError('REFUND_WITHOUT_DECISION', '用户退款必须有 REFUND 决策');
-          it.state = 'REFUNDED';             // T7
+          const kind = p.kind ?? 'FULL_REFUND';
+          if (d.received?.choice === 'REFUND' && kind === 'FULL_REFUND') {
+            it.state = 'REFUNDED';           // T7
+          } else if (d.received?.choice === 'REPLACE' && kind === 'REPLACE_DELTA_REFUND') {
+            break;                           // 退差不改前驱状态；T9 由后继锁定派生（§2.5）
+          } else {
+            throw new StoreError('REFUND_KIND_MISMATCH', '退款类型与决策不匹配（§4.5）');
+          }
         }
         break;
       }
