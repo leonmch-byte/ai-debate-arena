@@ -21,6 +21,7 @@ const newItem = (id, origin = 'ORIGINAL', replacementOf = null) => ({
 });
 
 export function projectItems(events) {
+  let orderPaid = false; // T1 前置：支付成功才可 ITEM_LOCKED（§3.1）
   const items = new Map();
   const known = new Set();       // 已被报价/订单/决策引入的 item
   const decisions = new Map();   // item_id → { requested, received }
@@ -55,6 +56,9 @@ export function projectItems(events) {
     promoteReplaced();
     const p = e.data ?? {};
     switch (e.type) {
+      case 'PAYMENT_SUCCEEDED':
+        orderPaid = true;
+        break;
       case 'QUOTE_CREATED':
       case 'ORDER_CONFIRMED':
         for (const it of (p.items ?? [])) { known.add(it.item_id); ensure(it.item_id); }
@@ -101,6 +105,8 @@ export function projectItems(events) {
           it.state = 'LOCKED';
         } else {
           requireState(it, ['QUOTED'], e);   // T1
+          if (!orderPaid)
+            throw new StoreError('PAYMENT_REQUIRED', 'ITEM_LOCKED 前必须有 PAYMENT_SUCCEEDED（T1/§3.1）');
           it.state = 'LOCKED';
         }
         break;
