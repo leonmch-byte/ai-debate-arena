@@ -53,10 +53,11 @@ export async function fulfillItem(store, orderId, itemId, modelId, adapter, opts
     }
     if (cls === 'A' && attempt < maxAttempts) {  // §4.2：A 类恢复环
       attempt += 1;
-      const wait = backoffMs * 2 ** (attempt - 1);
+      const scheduled = 1000 * 2 ** (attempt - 1);            // 协议退避表（§4.2），恒定，入事件
+      const wait = Math.round(backoffMs * 2 ** (attempt - 1)); // 实际睡眠，测试可缩放
       appendGuarded(store, orderId, store.getOrder(orderId),
         [{ type: 'RECOVERY_ATTEMPTED', item_id: itemId, reason_code: res.reason_code,
-           data: { attempt, backoff_ms: wait } }]);
+           data: { attempt, backoff_ms: scheduled } }]);
       if (wait > 0) await new Promise(r => setTimeout(r, wait));
       continue;
     }
