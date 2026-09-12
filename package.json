@@ -5,7 +5,9 @@
   "type": "module",
   "description": "多模型交叉评审平台 v3：协议驱动的权益/履约/结算体系",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test"
   },
-  "engines": { "node": ">=22.13" }
+  "engines": {
+    "node": ">=22.13"
+  }
 }
