@@ -8,7 +8,7 @@ import { projectOrder } from '../src/orders.js';
 import { createQuote } from '../src/pricing.js';
 import { confirmPayment, appendGuarded } from '../src/checkout.js';
 import { SandboxChannel } from '../src/payments.js';
-import { verifyE1 } from '../src/settlement.js';
+import { E1 } from '../src/settlement.js';
 
 const fresh = () => {
   const dir = mkdtempSync(join(tmpdir(), 'arena-m3-'));
@@ -37,7 +37,7 @@ test('M3-4 沙箱收款正常链 + E1 守恒 = 0', async () => {
     assert.deepEqual(it.funding_split, { cash_cents: it.locked_price_cents, credit_cents: 0, allocations: [] });
   driveToCompletion(store, q.order_id, h, oc.data.items);
   assert.equal(projectOrder(store.getOrder(q.order_id)), 'DELIVERED');
-  const e1 = verifyE1(store.getOrder(q.order_id));
+  const e1 = E1(store.getOrder(q.order_id));
   assert.equal(e1.diff, 0);
   assert.equal(e1.paid_cash_cents, 1600);
   cleanup(store, dir);
@@ -57,7 +57,7 @@ test('M3-5 券混合支付：funding_split 落账 + VOUCHER_REDEEMED 明细 + E1
   assert.equal(redeemed[0].data.allocations.length, 3);
   const oc = h.find(e => e.type === 'ORDER_CONFIRMED');
   driveToCompletion(store, q.order_id, h, oc.data.items);
-  const e1 = verifyE1(store.getOrder(q.order_id));
+  const e1 = E1(store.getOrder(q.order_id));
   assert.equal(e1.diff, 0);
   assert.equal(e1.paid_cash_cents, 600);
   cleanup(store, dir);
