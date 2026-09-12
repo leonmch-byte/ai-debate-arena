@@ -1,6 +1,6 @@
-// M8 前端。铁律（§4.4）：只渲染后端契约，不做任何金额计算（¥() 仅是格式化）。
+// M8 前端。铁律（§4.4）：只渲染后端契约，不做任何金额计算（yuan 仅是格式化函数）。
 const $ = s => document.querySelector(s);
-const ¥ = c => c == null ? '—' : '¥' + (c / 100).toFixed(2);
+const yuan = c => c == null ? '—' : '¥' + (c / 100).toFixed(2);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const ITEM_ZH = { QUOTED:'报价中', LOCKED:'已锁定', RUNNING:'执行中', COMPLETED:'✓ 已完成', FAILED_FINAL:'✗ 故障·待你决定',
   REFUNDED:'已退款', TIMEOUT_REFUNDED:'超时自动退款', REPLACED:'已更换', VOUCHERED:'已转服务额度', VOIDED:'已作废' };
@@ -22,7 +22,7 @@ async function boot() {
       <h2>选择会诊模型</h2>
       <div class="models">${Object.entries(models).map(([id, c]) => `
         <label class="model"><input type="checkbox" value="${id}" data-c="${c}">
-          <span>${esc(id)}</span><b>${¥(c)}</b></label>`).join('')}
+          <span>${esc(id)}</span><b>${yuan(c)}</b></label>`).join('')}
       </div>
       <div class="row"><button id="quote-btn" class="primary">生成报价</button>
       <span id="quote-err" class="err"></span></div>
@@ -38,7 +38,7 @@ function selected() {
 }
 function updateCount() {
   const s = selected();
-  $('#quote-btn').textContent = s.length ? `生成报价（${s.length} 模型 · 合计 ${¥(s.reduce((a, x) => a + x.c, 0))}）` : '生成报价';
+  $('#quote-btn').textContent = s.length ? `生成报价（${s.length} 模型 · 合计 ${yuan(s.reduce((a, x) => a + x.c, 0))}）` : '生成报价';
 }
 async function createQuote() {
   const ids = selected().map(x => x.id);
@@ -49,10 +49,10 @@ async function createQuote() {
     $('#quote-box').innerHTML = `
       <section class="card">
         <h2>报价单 <small class="dim">${q.order_id}</small></h2>
-        <table><tbody>${q.items.map(i => `<tr><td>${esc(i.model_id)}</td><td>${¥(i.locked_price_cents)}</td></tr>`).join('')}
-        <tr class="total"><td>合计</td><td>${¥(q.total_cents)}</td></tr></tbody></table>
+        <table><tbody>${q.items.map(i => `<tr><td>${esc(i.model_id)}</td><td>${yuan(i.locked_price_cents)}</td></tr>`).join('')}
+        <tr class="total"><td>合计</td><td>${yuan(q.total_cents)}</td></tr></tbody></table>
         <p class="dim">报价锁定 15 分钟。支付为沙箱模拟，不产生真实扣款。</p>
-        <button id="pay-btn" class="primary">模拟支付 ${¥(q.total_cents)}</button>
+        <button id="pay-btn" class="primary">模拟支付 ${yuan(q.total_cents)}</button>
         <span id="pay-err" class="err"></span>
       </section>`;
     $('#quote-box').scrollIntoView({ behavior: 'smooth' });
@@ -80,7 +80,7 @@ function renderOrder(v) {
       <h2>订单 <small class="dim">${v.order_id}</small></h2>
       <p class="status">${ORDER_ZH[v.status] ?? esc(v.status)}</p>
       <table><thead><tr><th>模型</th><th>价格</th><th>状态</th></tr></thead>
-      <tbody>${v.items.map(i => `<tr><td>${esc(i.model_id)}</td><td>${¥(i.locked_price_cents)}</td>
+      <tbody>${v.items.map(i => `<tr><td>${esc(i.model_id)}</td><td>${yuan(i.locked_price_cents)}</td>
         <td class="st-${i.state}">${ITEM_ZH[i.state] ?? esc(i.state)}</td></tr>`).join('')}</tbody></table>
       ${v.settlement ? settlementCard(v.settlement) : ''}
       <button id="back" class="ghost">← 新建会诊</button>
@@ -90,11 +90,11 @@ function renderOrder(v) {
 }
 function settlementCard(s) {
   return `<div class="settle"><h3>结算预演（后端推导，balance 必为 0）</h3><table><tbody>
-    <tr><td>订单总额</td><td>${¥(s.order_total_locked_cents)}</td></tr>
-    <tr><td>实收现金</td><td>${¥(s.paid_cash_cents)}</td></tr>
-    <tr><td>已退款</td><td>${¥(s.refunded_cash_cents)}</td></tr>
-    <tr><td>最终应收</td><td>${¥(s.final_due_cents)}</td></tr>
-    <tr><td>交付价值</td><td>${¥(s.delivered_value_cents)}</td></tr>
+    <tr><td>订单总额</td><td>${yuan(s.order_total_locked_cents)}</td></tr>
+    <tr><td>实收现金</td><td>${yuan(s.paid_cash_cents)}</td></tr>
+    <tr><td>已退款</td><td>${yuan(s.refunded_cash_cents)}</td></tr>
+    <tr><td>最终应收</td><td>${yuan(s.final_due_cents)}</td></tr>
+    <tr><td>交付价值</td><td>${yuan(s.delivered_value_cents)}</td></tr>
     <tr class="total"><td>balance</td><td>${s.balance_cents}</td></tr>
   </tbody></table><p class="dim">调整明细：${s.adjustments.map(a => `${esc(a.item_id.slice(-6))} ${esc(a.kind)} ${esc(a.note)}`).join('；')}</p></div>`;
 }
@@ -102,7 +102,7 @@ function showModal(d, orderId) {
   const f = d.failed_item;
   $('#modal-card').innerHTML = `
     <h3>模型故障：${esc(f.model_id)}</h3>
-    <p class="dim">${esc(f.reason_code)} · 已付 ${¥(f.locked_price_cents)}</p>
+    <p class="dim">${esc(f.reason_code)} · 已付 ${yuan(f.locked_price_cents)}</p>
     <div class="opts">
       <button data-c="REFUND" class="primary">${esc(d.options.find(o => o.type === 'REFUND').label)}</button>
       <button data-c="VOUCHER">${esc(d.options.find(o => o.type === 'VOUCHER').label)}</button>
