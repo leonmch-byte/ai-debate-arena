@@ -1,5 +1,6 @@
 // M2：服务项状态机（§3.1）、订单状态投影（§3.2）、事件准入守卫（§3.3）
 // 原则：状态永远是事件流的推导值。本模块只读事件、推导状态、拒绝违规，不存在"写状态"。
+// M2-fix：REPLACED 推导改为逐事件刷新，守卫判定候选事件时可见最新推导态。
 import { StoreError } from './store.js';
 
 export const ITEM_TERMINAL = new Set([
@@ -40,7 +41,18 @@ export function projectItems(events) {
   };
   const decOf = (id) => decisions.get(id) ?? {};
 
+  // 派生规则（T9）：前驱 REPLACED ⟺ 存在已锁定以上的后继（§3.3-3 结构上不可能发生）。
+  // 每个事件处理前刷新推导态，保证守卫看到的是最新状态。
+  const promoteReplaced = () => {
+    for (const it of items.values()) {
+      if (it.state !== 'FAILED_FINAL') continue;
+      const succ = [...items.values()].find(s => s.origin === 'REPLACEMENT' && s.replacement_of === it.item_id);
+      if (succ && succ.state !== 'QUOTED' && succ.state !== 'VOIDED') it.state = 'REPLACED';
+    }
+  };
+
   for (const e of events) {
+    promoteReplaced();
     const p = e.data ?? {};
     switch (e.type) {
       case 'QUOTE_CREATED':
@@ -190,13 +202,7 @@ export function projectItems(events) {
         break; // 其余为订单级事件，由 projectOrder 处理
     }
   }
-
-  // 派生规则（T9）：前驱 REPLACED ⟺ 存在已锁定以上的后继。结构上保证 §3.3-3 不可能发生。
-  for (const it of items.values()) {
-    if (it.state !== 'FAILED_FINAL') continue;
-    const succ = [...items.values()].find(s => s.origin === 'REPLACEMENT' && s.replacement_of === it.item_id);
-    if (succ && succ.state !== 'QUOTED' && succ.state !== 'VOIDED') it.state = 'REPLACED';
-  }
+  promoteReplaced();
   return items;
 }
 

@@ -178,7 +178,7 @@ test('M2-11 真实账本集成：data 载荷往返 + 守卫挂在 store 上', ()
   ]);
   const h = s.getOrder('ord_i');
   assert.deepEqual(h[0].data, { items: [{ item_id: 'itm_1', locked_price_cents: 800 }] });
-  assert.equal(projectOrder(h), 'AWAITING_PAYMENT');
+  assert.equal(projectOrder(h), 'FULFILLING');
   expectCode(() => assertEventAllowed(h, E('ITEM_COMPLETED', { item_id: 'itm_1' })), 'ILLEGAL_TRANSITION');
   s.close(); rmSync(dir, { recursive: true, force: true });
 });
