@@ -2,6 +2,7 @@
 // 重试语义（§5.4）：复用未决义务（无 REFUND_EXECUTED 引用的 REFUND_DUE），义务至多生效一次。
 import { genOperationId, genVoucherId } from './ids.js';
 import { StoreError } from './store.js';
+import { VOUCHER_TTL_DAYS } from './config.js';
 import { appendGuarded } from './checkout.js';
 
 export function orderItem(history, itemId) {
@@ -64,7 +65,7 @@ export async function applyFullRefund(store, orderId, itemId, { channel, decisio
     const voucher_id = genVoucherId();
     appendGuarded(store, orderId, store.getOrder(orderId), [{
       type: 'VOUCHER_ISSUED', item_id: itemId, amount_cents: fs.credit_cents,
-      data: { source: 'REFUND_RESTORE', voucher_id, face_value_cents: fs.credit_cents },
+      data: { source: 'REFUND_RESTORE', voucher_id, face_value_cents: fs.credit_cents, expires_at: new Date(Date.now() + VOUCHER_TTL_DAYS * 86400_000).toISOString(), },
     }]);
     return { refunded_cash_cents: cash, voucher_id, credit_cents: fs.credit_cents };
   }

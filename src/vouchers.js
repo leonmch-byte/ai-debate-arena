@@ -5,7 +5,8 @@ export function projectVouchers(events) {
   const ensure = id => {
     if (!v.has(id)) v.set(id, {
       voucher_id: id, face_value_cents: 0, redeemed_cents: 0,
-      reserved_cents: 0, expired_cents: 0, remaining_cents: 0, sources: [],
+      reserved_cents: 0, expired_cents: 0, remaining_cents: 0,
+      expires_at: null, sources: [],
     });
     return v.get(id);
   };
@@ -16,6 +17,7 @@ export function projectVouchers(events) {
         const x = ensure(d.voucher_id);
         x.face_value_cents += d.face_value_cents ?? e.amount_cents ?? 0;
         x.remaining_cents += d.face_value_cents ?? e.amount_cents ?? 0;
+        if (d.expires_at) x.expires_at = d.expires_at;
         x.sources.push(d.source ?? 'UNKNOWN');
         break;
       }
@@ -33,7 +35,8 @@ export function assertI7(events) {
   for (const x of projectVouchers(events).values()) {
     const lhs = x.face_value_cents;
     const rhs = x.remaining_cents + x.redeemed_cents + x.reserved_cents + x.expired_cents;
-    if (lhs !== rhs) throw Object.assign(new Error(`I7 violated: ${x.voucher_id} ${lhs}≠${rhs}`), { code: 'I7_VIOLATED' });
+    if (lhs !== rhs)
+      throw Object.assign(new Error(`I7 violated: ${x.voucher_id} ${lhs}≠${rhs}`), { code: 'I7_VIOLATED' });
   }
   return true;
 }

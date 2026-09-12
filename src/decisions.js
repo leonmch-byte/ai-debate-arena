@@ -1,5 +1,5 @@
 // M5：决策引擎。弹窗数据契约（§4.4）由后端预计算；执行路径（§4.5）落账全部过 M2 守卫。
-import { SLA, PRICE_TABLE_VERSION, PRICE_TABLES } from './config.js';
+import { SLA, PRICE_TABLE_VERSION, PRICE_TABLES, VOUCHER_TTL_DAYS } from './config.js';
 import { genDecisionId, genItemId, genVoucherId, genOperationId } from './ids.js';
 import { StoreError } from './store.js';
 import { appendGuarded } from './checkout.js';
@@ -70,7 +70,7 @@ export function executeVoucherChoice(store, orderId, itemId) {
   const voucher_id = genVoucherId();
   appendGuarded(store, orderId, store.getOrder(orderId), [{
     type: 'VOUCHER_ISSUED', item_id: itemId, amount_cents: locked, caused_by: [due.event_id],
-    data: { source: 'FAULT_COMPENSATION', voucher_id, face_value_cents: locked },
+    data: { source: 'FAULT_COMPENSATION', voucher_id, face_value_cents: locked, expires_at: new Date(Date.now() + VOUCHER_TTL_DAYS * 86400_000).toISOString(), },
   }]);
   return { voucher_id, credit_cents: locked };
 }
@@ -115,7 +115,7 @@ export async function executeReplaceChoice(store, orderId, itemId, successorMode
   if (c.credit_surplus_cents > 0) {                               // 券溢余：订单级发新券（§2.5）
     appendGuarded(store, orderId, store.getOrder(orderId), [{
       type: 'VOUCHER_ISSUED', amount_cents: c.credit_surplus_cents,
-      data: { source: 'CARRYOVER_SURPLUS', voucher_id: genVoucherId(), face_value_cents: c.credit_surplus_cents },
+      data: { source: 'CARRYOVER_SURPLUS', voucher_id: genVoucherId(), face_value_cents: c.credit_surplus_cents, expires_at: new Date(Date.now() + VOUCHER_TTL_DAYS * 86400_000).toISOString(), },
     }]);
   }
   return { successor_item_id: succItemId, carryover: c };

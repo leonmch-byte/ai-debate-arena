@@ -10,7 +10,6 @@ try {
   process.exit(1);
 }
 
-// 事件类型注册表：§2.2 + §6.2 + §5.4 全集。扩展类型只改这里（协议允许扩展不破坏）。
 const EVENT_TYPES = new Set([
   'QUOTE_CREATED', 'QUOTE_EXPIRED', 'ORDER_CONFIRMED',
   'PAYMENT_INITIATED', 'PAYMENT_SUCCEEDED', 'PAYMENT_FAILED', 'PAYMENT_UNKNOWN_RESOLVED',
@@ -76,7 +75,6 @@ export class EventStore {
     `);
   }
 
-  // 追加事件。单条或数组均可。可选项：event_id（重试）、seq（显式指定，用于测试乱序拒绝）。
   append(orderId, events) {
     if (typeof orderId !== 'string' || !orderId.startsWith('ord_'))
       throw new StoreError('INVALID_EVENT', 'order_id 必须以 ord_ 开头');
@@ -129,12 +127,16 @@ export class EventStore {
       .all(orderId).map(r => JSON.parse(r.payload));
   }
 
+  getAllEvents() {
+    return this.db.prepare('SELECT payload FROM events ORDER BY occurred_at, rowid')
+      .all().map(r => JSON.parse(r.payload));
+  }
+
   getEvent(eventId) {
     const r = this.db.prepare('SELECT payload FROM events WHERE event_id = ?').get(eventId);
     return r ? JSON.parse(r.payload) : null;
   }
 
-  // 记录渠道操作。同 operation_id 重复到达 → 静默幂等返回已有行（I2）。
   recordOperation({ operation_id, order_id, obligation_id, type, state = 'CREATED', channel_ref = null }) {
     const now = new Date().toISOString();
     try {
@@ -171,6 +173,10 @@ export class EventStore {
 
   getOperation(id) {
     return this.db.prepare('SELECT * FROM operations WHERE operation_id = ?').get(id) ?? null;
+  }
+
+  getOperationsByOrder(orderId) {
+    return this.db.prepare('SELECT * FROM operations WHERE order_id = ? ORDER BY created_at').all(orderId);
   }
 
   close() { this.db.close(); }
