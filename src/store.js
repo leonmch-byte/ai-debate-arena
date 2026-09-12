@@ -6,7 +6,7 @@ let DatabaseSync;
 try {
   ({ DatabaseSync } = await import('node:sqlite'));
 } catch {
-  console.error('需要 Node >= 22.13（内置 node:sqlite）。请先完成块 A 的版本升级。');
+  console.error('需要 Node >= 22.13（内置 node:sqlite）。');
   process.exit(1);
 }
 
@@ -22,7 +22,7 @@ const EVENT_TYPES = new Set([
   'VOUCHER_ISSUED', 'VOUCHER_RESERVED', 'VOUCHER_REDEEMED', 'VOUCHER_RELEASED', 'VOUCHER_EXPIRED',
   'SETTLEMENT_PREVIEWED', 'SETTLEMENT_FINALIZED',
   'OBJECTION_RAISED', 'OBJECTION_RESOLVED',
-  'LEDGER_CORRECTION',
+  'LEDGER_CORRECTION', 'SURCHARGE_EXPIRED',
 ]);
 const DECISION_SOURCES = new Set(['SYSTEM_RULE', 'USER_DECISION', 'TIMEOUT_RULE', 'HUMAN_EXCEPTION']);
 
@@ -51,6 +51,7 @@ export class EventStore {
         decision_source TEXT NOT NULL,
         caused_by       TEXT NOT NULL,
         payload         TEXT NOT NULL,
+        data            TEXT NOT NULL,
         occurred_at     TEXT NOT NULL,
         UNIQUE(order_id, seq)
       );
@@ -87,8 +88,8 @@ export class EventStore {
     const hasEvent = this.db.prepare('SELECT 1 FROM events WHERE event_id = ?');
     const insert = this.db.prepare(`INSERT INTO events
       (event_id, order_id, seq, item_id, type, amount_cents, reason_code,
-       decision_source, caused_by, payload, occurred_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+       decision_source, caused_by, payload, data, occurred_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -107,7 +108,7 @@ export class EventStore {
         try {
           insert.run(env.event_id, orderId, env.seq, env.item_id, env.type,
             env.amount_cents, env.reason_code, env.decision_source,
-            JSON.stringify(env.caused_by), JSON.stringify(env), env.occurred_at);
+            JSON.stringify(env.caused_by), JSON.stringify(env), JSON.stringify(env.data), env.occurred_at);
         } catch (e) {
           if (String(e.message).includes('UNIQUE'))
             throw new StoreError('DUPLICATE_EVENT', `event_id 已存在 ${env.event_id}`);
@@ -186,6 +187,8 @@ function normalize(orderId, raw, now) {
   const caused = raw.caused_by ?? [];
   if (!Array.isArray(caused) || caused.some(x => typeof x !== 'string'))
     throw new StoreError('INVALID_EVENT', 'caused_by 必须是字符串数组');
+  if (raw.data !== undefined && (typeof raw.data !== 'object' || raw.data === null || Array.isArray(raw.data)))
+    throw new StoreError('INVALID_EVENT', 'data 必须是普通对象');
   return {
     event_id: raw.event_id ?? uuidv7(),
     order_id: orderId,
@@ -196,6 +199,7 @@ function normalize(orderId, raw, now) {
     reason_code: raw.reason_code ?? null,
     decision_source: source,
     caused_by: caused,
+    data: raw.data ?? {},
     occurred_at: raw.occurred_at ?? now,
   };
 }
