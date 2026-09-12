@@ -122,7 +122,7 @@ export function previewSettlement(store, orderId, { now = new Date() } = {}) {
     previewed_at: now.toISOString(),
   };
   appendGuarded(store, orderId, h,
-    [{ type: 'SETTLEMENT_PREVIEWED', data: { preview } }]);
+    [{ type: 'SETTLEMENT_PREVIEWED', occurred_at: now.toISOString(), data: { preview } }]);
   return preview;
 }
 
