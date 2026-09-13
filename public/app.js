@@ -38,18 +38,30 @@ function home(models) {
   </section>
   <section class="card">
     <h2>② 请 AI 上桌（至少 2 位，越多碰撞越烈）</h2>
-    <div class="models">${Object.entries(models).map(([id, c]) => `
-      <label class="model"><input type="checkbox" value="${id}" data-c="${c}">
-        <span>${esc(id)}</span><b>${yuan(c)}</b></label>`).join('')}
+    <div class="mpanel">
+      <button type="button" id="mpanel-toggle" class="mp-toggle">
+        <span id="mpanel-label">请选择 AI 顾问</span><span class="caret">▾</span>
+      </button>
+      <div class="models hidden" id="models-grid">${Object.entries(models).map(([id]) => `
+        <label class="model"><input type="checkbox" value="${id}">
+          <span>${esc(id)}</span></label>`).join('')}
+      </div>
+      <p class="byok">已有自己的 AI 密钥？<a id="byok-link">用自带密钥模式 →</a>（即将开放）</p>
     </div>
     <div class="row"><button id="quote-btn" class="primary big">③ 生成报价</button>
     <span id="quote-err" class="err"></span></div>
-    <p class="byok">已有自己的 AI 账号/密钥？<a id="byok-link">用自带密钥模式 →</a>（即将开放）</p>
   </section>
   <section id="quote-box"></section>`;
   $('#quote-btn').onclick = () => createQuote();
   $('#app').addEventListener('input', updateCount);
+  $('#app').addEventListener('change', e => {
+    if (e.target.closest('.models')) updateCount();
+  });
   $('#byok-link').onclick = byokModal;
+  $('#mpanel-toggle').onclick = () => {
+    $('#models-grid').classList.toggle('hidden');
+    $('#mpanel-toggle').classList.toggle('open');
+  };
   $('#topic').focus();
   updateCount();
 }
@@ -65,9 +77,10 @@ function selected() {
   return [...document.querySelectorAll('.model input:checked')].map(i => ({ id: i.value, c: Number(i.dataset.c) }));
 }
 function updateCount() {
-  const b = $('#quote-btn'); if (!b) return;
+  const b = $('#quote-btn'), l = $('#mpanel-label'); if (!b) return;
   const s = selected();
-  b.textContent = s.length ? `③ 生成报价（${s.length} 位 AI · 合计 ${yuan(s.reduce((a, x) => a + x.c, 0))}）` : '③ 生成报价';
+  if (l) l.textContent = s.length ? `已请 ${s.length} 位 AI 上桌（点击调整）` : '请选择 AI 顾问';
+  b.textContent = s.length ? `③ 生成报价（${s.length} 位 AI）` : '③ 生成报价';
 }
 async function createQuote() {
   const ids = selected().map(x => x.id);
