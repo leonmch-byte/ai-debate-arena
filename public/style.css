@@ -33,3 +33,16 @@ tr.total td { font-weight:700; border-top:2px solid var(--line); }
 .reps { display:grid; grid-template-columns:1fr 1fr; } .reps button { text-align:left; }
 .notice { font-size:12px; }
 @media (max-width:600px) { .reps { grid-template-columns:1fr; } .hero h1 { font-size:21px; } main { padding:14px 10px 50px; } }
+/* v3: 头脑风暴叙事 */
+.who { display:flex; gap:10px; align-items:center; margin:14px 0; flex-wrap:wrap; }
+.who span { color:var(--dim); font-size:12px; }
+.who b { background:var(--card); border:1px solid var(--line); padding:5px 14px; border-radius:20px; font-size:13px; font-weight:500; }
+.qbox { margin:14px 0; } .qbox label { display:block; font-size:14px; margin-bottom:6px; }
+.qbox textarea { width:100%; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:10px; padding:12px; font:14px/1.6 inherit; resize:vertical; }
+.qbox textarea:focus { outline:none; border-color:var(--pri); }
+.collision { background:linear-gradient(135deg,#1a1f2e,#161a22); border:1px solid var(--pri); border-radius:14px; padding:16px 20px; margin:16px 0; }
+.collision h3 { margin:0 0 10px; } .collision h4 { margin:12px 0 6px; font-size:14px; }
+.col-block.dis h4 { color:#ffb35c; } .col-block.hole h4 { color:var(--bad); } .col-block.con h4 { color:var(--ok); }
+.pt { padding:6px 0; border-bottom:1px dashed var(--line); font-size:14px; }
+.pt:last-child { border-bottom:none; } .snip { color:var(--dim); font-size:13px; padding-left:12px; }
+.snip i, .pt i { color:var(--pri); font-style:normal; font-size:12px; }

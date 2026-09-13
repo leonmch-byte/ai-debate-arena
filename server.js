@@ -12,6 +12,7 @@ import { projectItems, projectOrder, ITEM_TERMINAL } from './src/orders.js';
 import { openDecision, executeRefundChoice, executeVoucherChoice, executeReplaceChoice } from './src/decisions.js';
 import { previewSettlement } from './src/settlement.js';
 import { PRICE_TABLES, PRICE_TABLE_VERSION } from './src/config.js';
+import { buildCollisionReport } from './src/collision.js';
 
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -49,7 +50,8 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
   }
 
   // §4.3 流水线自动化：驱动全部可跑项 → 为 FAILED_FINAL 自动开决策 → 终态自动预演
-  async function driveOrder(orderId) {
+  async function driveOrder(orderId, topic = '') {
+    if (topic) lastTopic = topic;
     for (const it of projectItems(store.getOrder(orderId)).values())
       if (it.state === 'QUOTED' || it.state === 'LOCKED')
         await fulfillItem(store, orderId, it.item_id, modelFor(store.getOrder(orderId), it.item_id), adapter);
@@ -59,6 +61,8 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
         openDecision(store, orderId, it.item_id);
     maybePreview(orderId);
   }
+
+  let lastTopic = '';
 
   function orderView(orderId) {
     const h = store.getOrder(orderId);
@@ -81,12 +85,17 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
       ? [...h].reverse().find(e => e.type === 'DECISION_REQUESTED' && e.item_id === pend.item_id)?.data?.payload ?? null
       : null;                                        // §4.4 契约原文，前端只渲染
     const pv = [...h].reverse().find(e => e.type === 'SETTLEMENT_PREVIEWED');
+    const collision = buildCollisionReport(itemViews.filter(i => i.result_ref).map(i => ({
+      model_id: i.model_id,
+      text: (() => { const rp = join(process.cwd(), 'results', i.result_ref.replace(/^sim:/, '')); try { return existsSync(rp) ? readFileSync(rp, 'utf8') : (i.result_ref.startsWith('sim:') ? SIM_TEXT[i.model_id] ?? '' : ''); } catch { return ''; } })(),
+    })));
     return {
       order_id: orderId,
       status: projectOrder(h),
       items: itemViews,
       decision,
-      settlement: pv?.data.preview ?? null,          // §7.2 预演原文
+      settlement: pv?.data.preview ?? null,
+      collision,                                     // 碰撞报告（分歧/漏洞/共识）
     };
   }
 
@@ -123,7 +132,8 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
         return send(200, r);
       }
       if ((m = url.pathname.match(/^\/api\/orders\/(ord_\w+)\/run$/)) && req.method === 'POST') {
-        await driveOrder(m[1]);
+        const topic = body.topic ?? '';
+        await driveOrder(m[1], topic);
         return send(200, orderView(m[1]));
       }
       if ((m = url.pathname.match(/^\/api\/orders\/(ord_\w+)\/items\/(itm_\w+)\/decision$/)) && req.method === 'POST') {
@@ -148,6 +158,10 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
       return send(500, { error: 'INTERNAL', message: String(e?.message ?? e) });
     }
   }
+
+  const SIM_TEXT = {
+    default: '【沙箱演示意见】本 AI 认为该议题值得关注：从市场角度看存在机会窗口，建议尽快验证需求真实性；主要风险在于执行成本与时机选择，若团队能力匹配，可以小步快跑验证。'
+  };
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
