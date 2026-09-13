@@ -14,7 +14,7 @@ test('M8-5 静态服务：/ 返回产品页，css/js 可达', async t => {
   const r = await fetch(base + '/');
   assert.equal(r.status, 200);
   const html = await r.text();
-  assert.ok(html.includes('AI 多模型会诊'));
+  assert.ok(html.includes('头脑风暴') || html.includes('联合评审'));
   assert.equal((await fetch(base + '/style.css')).status, 200);
   assert.equal((await fetch(base + '/app.js')).status, 200);
 });

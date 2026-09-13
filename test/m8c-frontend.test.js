@@ -6,5 +6,5 @@ test('M8-6 前端资源：app.js 必须可被 JS 引擎解析（¥ 标识符事�
   const src = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.doesNotThrow(() => new Function(src));
   const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
-  assert.ok(html.includes('AI 多模型会诊'));
+  assert.ok(html.includes('头脑风暴') || html.includes('联合评审'));
 });
