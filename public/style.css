@@ -57,3 +57,13 @@ tr.total td { font-weight:700; border-top:2px solid var(--line); }
 .notice { font-size:12px; }
 .byok { font-size:13px; color:var(--dim); margin-top:10px; } .byok a { color:var(--pri); cursor:pointer; }
 @media (max-width:600px) { .reps { grid-template-columns:1fr; } .hero h1 { font-size:21px; } main { padding:14px 10px 50px; } }
+/* v6: auth + orders + byok card */
+.hidden { display:none !important; }
+nav a, #auth-box a { cursor:pointer; }
+#auth-box { margin-left:16px; font-size:14px; } #auth-box .dim { margin-right:10px; }
+.byok-card { border-style:dashed; color:var(--dim); justify-content:center; }
+.byok-card:hover { color:var(--pri); }
+.frow { margin:10px 0; } .frow label { display:block; font-size:13px; color:var(--dim); margin-bottom:4px; }
+.frow input { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:14px inherit; background:#fbfcfe; }
+.frow input:focus { outline:none; border-color:var(--pri); }
+.olink { color:var(--pri); text-decoration:none; }

@@ -5,7 +5,7 @@ const ITEM_ZH = { QUOTED:'待支付', LOCKED:'已确认', RUNNING:'思考中', C
   REFUNDED:'已退款', TIMEOUT_REFUNDED:'超时自动退款', REPLACED:'已更换', VOUCHERED:'已转额度', VOIDED:'已作废' };
 const ORDER_ZH = { QUOTED:'报价中', AWAITING_PAYMENT:'待支付', FULFILLING:'头脑风暴进行中', DELIVERED:'已交付',
   SETTLEMENT_PENDING:'结算确认期（72h）', SETTLEMENT_FINALIZED:'✓ 已完结', VOIDED:'已作废', DISPUTED:'争议处理中' };
-let poll = null;
+let poll = null, ME = null;
 
 async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts });
@@ -18,6 +18,44 @@ async function fetchResult(ref) {
   try { const r = await fetch('/results/' + encodeURIComponent(ref)); return r.ok ? r.text() : null; } catch { return null; }
 }
 
+/* ---------- 认证 ---------- */
+function renderAuthBox(user) {
+  ME = user;
+  $('#nav-orders').classList.toggle('hidden', !user);
+  const box = $('#auth-box');
+  box.innerHTML = user
+    ? `<span class="dim">${esc(user.email)}</span><a id="logout-link">退出</a>`
+    : `<a id="login-link">登录 / 注册</a>`;
+  if (user) $('#logout-link').onclick = async () => {
+    await api('/api/auth/logout', { method: 'POST' }); location.hash = ''; boot();
+  };
+  else $('#login-link').onclick = () => authModal();
+}
+function authModal(note = '', after = null) {
+  $('#modal-card').innerHTML = `
+    <h3>登录 / 注册</h3>
+    ${note ? `<p class="dim">${esc(note)}</p>` : '<p class="dim">已有账号直接登录；没有则填好信息点「注册新账号」。</p>'}
+    <div class="frow"><label>邮箱</label><input id="au-email" type="email" placeholder="you@example.com"></div>
+    <div class="frow"><label>密码</label><input id="au-pass" type="password" placeholder="至少 8 位"></div>
+    <p class="err" id="au-err"></p>
+    <div class="row"><button class="primary" id="au-login">登录</button>
+    <button id="au-reg">注册新账号</button></div>`;
+  $('#modal').classList.remove('hidden');
+  const go = async path => {
+    try {
+      await api(path, { method: 'POST',
+        body: { email: $('#au-email').value.trim(), password: $('#au-pass').value } });
+      hideModal();
+      const me = await api('/api/auth/me');
+      renderAuthBox(me.user);
+      if (after) after();
+    } catch (e) { $('#au-err').textContent = e.message; }
+  };
+  $('#au-login').onclick = () => go('/api/auth/login');
+  $('#au-reg').onclick = () => go('/api/auth/register');
+}
+
+/* ---------- 首页 ---------- */
 function home(models) {
   $('#app').innerHTML = `
   <section class="hero">
@@ -25,7 +63,7 @@ function home(models) {
     <p>你出题，多个 AI <b>各自独立</b>给出方案——然后放大它们<b>碰撞出的火花</b>：
     谁和谁针锋相对、谁的方案被别人挑出漏洞、哪些点全员一致。<br>
     <span class="dim">一个人问 AI 得到一个答案；一桌 AI 互相碰撞，才照出你的盲区。</span></p>
-    <div class="who"><span>适合</span><b>创业者</b><b>企业主</b><b>智库研究员</b><b>程序员</b></div>
+    <div class="who"><span>适合</span><b>任何需要被挑战的决策</b>——立项评估 · 方案评审 · 政策分析 · 技术选型 · 投资判断</div>
     <ul class="pts">
       <li><b>独立出方案</b>：互不知情，避免互相污染，才有真分歧</li>
       <li><b>碰撞报告</b>：分歧点 / 被挑出的漏洞 / 意外共识</li>
@@ -42,11 +80,12 @@ function home(models) {
       <button type="button" id="mpanel-toggle" class="mp-toggle">
         <span id="mpanel-label">请选择 AI 顾问</span><span class="caret">▾</span>
       </button>
-      <div class="models hidden" id="models-grid">${Object.entries(models).map(([id]) => `
-        <label class="model"><input type="checkbox" value="${id}">
-          <span>${esc(id)}</span></label>`).join('')}
+      <div class="models hidden" id="models-grid">
+        ${Object.entries(models).map(([id]) => `
+          <label class="model"><input type="checkbox" value="${id}">
+            <span>${esc(id)}</span></label>`).join('')}
+        <div class="model byok-card" id="byok-card"><span>🔑 自带密钥模式</span></div>
       </div>
-      <p class="byok">已有自己的 AI 密钥？<a id="byok-link">用自带密钥模式 →</a>（即将开放）</p>
     </div>
     <div class="row"><button id="quote-btn" class="primary big">③ 生成报价</button>
     <span id="quote-err" class="err"></span></div>
@@ -54,27 +93,25 @@ function home(models) {
   <section id="quote-box"></section>`;
   $('#quote-btn').onclick = () => createQuote();
   $('#app').addEventListener('input', updateCount);
-  $('#app').addEventListener('change', e => {
-    if (e.target.closest('.models')) updateCount();
-  });
-  $('#byok-link').onclick = byokModal;
+  $('#app').addEventListener('change', e => { if (e.target.closest('.models')) updateCount(); });
   $('#mpanel-toggle').onclick = () => {
     $('#models-grid').classList.toggle('hidden');
     $('#mpanel-toggle').classList.toggle('open');
   };
+  $('#byok-card').onclick = byokModal;
   $('#topic').focus();
   updateCount();
 }
 function byokModal() {
   $('#modal-card').innerHTML = `
-    <h3>自带密钥模式（即将开放）</h3>
-    <p class="dim">用自己的 AI 平台 API Key 召唤模型，平台只收取少量撮合服务费，模型费用直接走你自己的账号。</p>
-    <p class="dim">该模式内测后开放。届时支持：阿里百炼 / 火山方舟 / DeepSeek / OpenAI 兼容接口。</p>
+    <h3>🔑 自带密钥模式（即将开放）</h3>
+    <p class="dim">用自己的 AI 平台 API Key 召唤模型，模型费用直接走你自己的账号，平台只收少量撮合服务费。</p>
+    <p class="dim">内测后开放，支持：阿里百炼 / 火山方舟 / DeepSeek / 任何 OpenAI 兼容接口。你的 Key 只在本机内存中使用，不落盘、不入库。</p>
     <div class="row"><button onclick="hideModal()">知道了</button></div>`;
   $('#modal').classList.remove('hidden');
 }
 function selected() {
-  return [...document.querySelectorAll('.model input:checked')].map(i => ({ id: i.value, c: Number(i.dataset.c) }));
+  return [...document.querySelectorAll('.models input:checked')].map(i => i.value);
 }
 function updateCount() {
   const b = $('#quote-btn'), l = $('#mpanel-label'); if (!b) return;
@@ -83,7 +120,7 @@ function updateCount() {
   b.textContent = s.length ? `③ 生成报价（${s.length} 位 AI）` : '③ 生成报价';
 }
 async function createQuote() {
-  const ids = selected().map(x => x.id);
+  const ids = selected();
   const topic = ($('#topic')?.value ?? '').trim();
   if (topic.length < 5) { $('#quote-err').textContent = '先写下你的议题（至少 5 个字）——AI 们要围绕它碰撞'; return; }
   if (!ids.length) { $('#quote-err').textContent = '至少请一位 AI 上桌'; return; }
@@ -103,7 +140,10 @@ async function createQuote() {
       </section>`;
     $('#quote-box').scrollIntoView({ behavior: 'smooth' });
     $('#pay-btn').onclick = () => payAndRun(q.order_id, topic);
-  } catch (e) { $('#quote-err').textContent = e.message; }
+  } catch (e) {
+    if (e.message.startsWith('LOGIN_REQUIRED')) authModal('登录后即可发起头脑风暴', () => createQuote());
+    else $('#quote-err').textContent = e.message;
+  }
 }
 async function payAndRun(orderId, topic) {
   try {
@@ -113,6 +153,8 @@ async function payAndRun(orderId, topic) {
     startPolling(orderId);
   } catch (e) { $('#pay-err').textContent = e.message; }
 }
+
+/* ---------- 订单 ---------- */
 function startPolling(orderId) {
   if (poll) clearInterval(poll);
   location.hash = '#/order/' + orderId;
@@ -188,9 +230,33 @@ function showModal(d, orderId) {
 }
 function hideModal() { $('#modal').classList.add('hidden'); }
 
+/* ---------- 我的订单 ---------- */
+async function myOrders() {
+  let orders;
+  try { ({ orders } = await api('/api/my/orders')); }
+  catch (e) { if (e.message.startsWith('LOGIN_REQUIRED')) return authModal('登录后查看我的订单'); throw e; }
+  $('#app').innerHTML = `
+    <section class="card">
+      <h2>我的订单</h2>
+      ${orders.length ? `<table><thead><tr><th>订单</th><th>时间</th><th>金额</th><th>状态</th></tr></thead><tbody>
+        ${orders.map(o => `<tr>
+          <td><a class="olink" href="#/order/${o.order_id}">${esc(o.order_id.slice(0, 16))}…</a></td>
+          <td class="dim">${new Date(o.created_at).toLocaleString('zh-CN')}</td>
+          <td>${yuan(o.total_cents)}</td>
+          <td>${ORDER_ZH[o.status] ?? esc(o.status)}</td></tr>`).join('')}
+      </tbody></table>` : '<p class="dim">还没有发起过头脑风暴——去发起第一场吧。</p>'}
+      <div class="row"><button id="back" class="ghost">← 发起新的风暴</button></div>
+    </section>`;
+  $('#back').onclick = () => { location.hash = ''; boot(); };
+}
+
+/* ---------- 路由 ---------- */
 async function boot() {
+  try { const me = await api('/api/auth/me'); renderAuthBox(me.user); }
+  catch { renderAuthBox(null); }
   const om = location.hash.match(/^#\/order\/(ord_\w+)$/);
   if (om) { startPolling(om[1]); return; }
+  if (location.hash === '#/orders') return myOrders();
   if (poll) { clearInterval(poll); poll = null; }
   const { models } = await api('/api/models');
   home(models);

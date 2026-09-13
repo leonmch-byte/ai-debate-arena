@@ -12,6 +12,7 @@ import { projectItems, projectOrder, ITEM_TERMINAL } from './src/orders.js';
 import { openDecision, executeRefundChoice, executeVoucherChoice, executeReplaceChoice } from './src/decisions.js';
 import { previewSettlement } from './src/settlement.js';
 import { PRICE_TABLES, PRICE_TABLE_VERSION } from './src/config.js';
+import { Auth } from './src/auth.js';
 import { buildCollisionReport } from './src/collision.js';
 
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
@@ -19,6 +20,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulateFail = [], log = (...a) => console.log(...a) } = {}) {
   const store = new EventStore(dbPath);
+  const auth = new Auth(store);
   const channel = new SandboxChannel();
   // 模拟适配器（M9 换真实 providers.js，M4 已定接口契约）：
   // simulateFail 中的模型按 B 类永久失败（不进恢复环，直达决策弹窗，演示路径最短）
@@ -99,6 +101,11 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
     };
   }
 
+  function sessionUser(req) {
+    const m = (req.headers.cookie ?? '').match(/(?:^|;\s*)arena_session=([a-f0-9]+)/);
+    return m ? auth.verify(m[1]) : null;
+  }
+
   const readBody = req => new Promise((resolve, reject) => {
     let s = '';
     req.on('data', d => { s += d; if (s.length > 1e6) req.destroy(); });
@@ -113,13 +120,46 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
     const send = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
     try {
       const body = await readBody(req);
+
+      if (req.method === 'POST' && url.pathname === '/api/auth/register') {
+        const u = auth.register(body.email, body.password);
+        const ses = auth.login(body.email, body.password);
+        res.setHeader('Set-Cookie', `arena_session=${ses.token}; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax`);
+        return send(200, { user: u });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/auth/login') {
+        const ses = auth.login(body.email, body.password);
+        const u = auth.verify(ses.token);
+        res.setHeader('Set-Cookie', `arena_session=${ses.token}; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax`);
+        return send(200, { user: u });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
+        const m = (req.headers.cookie ?? '').match(/arena_session=([a-f0-9]+)/);
+        if (m) auth.logout(m[1]);
+        res.setHeader('Set-Cookie', 'arena_session=; HttpOnly; Path=/; Max-Age=0');
+        return send(200, { ok: true });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/auth/me')
+        return send(200, { user: sessionUser(req) });
+      if (req.method === 'GET' && url.pathname === '/api/my/orders') {
+        const u = sessionUser(req);
+        if (!u) return send(401, { error: 'LOGIN_REQUIRED' });
+        const orders = store.getEventsByType('QUOTE_CREATED')
+          .filter(e => e.data?.user_id === u.user_id)
+          .map(e => ({ order_id: e.order_id, created_at: e.occurred_at,
+                       total_cents: e.data.total_cents, status: projectOrder(store.getOrder(e.order_id)) }))
+          .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        return send(200, { orders });
+      }
       let m;
       if (req.method === 'GET' && url.pathname === '/api/health')
         return send(200, { ok: true, orders: store.getAllOrderIds().filter(x => x !== 'ord_system').length });
       if (req.method === 'GET' && url.pathname === '/api/models')
         return send(200, { price_table_version: PRICE_TABLE_VERSION, models: PRICE_TABLES[PRICE_TABLE_VERSION].models });
       if (req.method === 'POST' && url.pathname === '/api/quote') {
-        const q = createQuote(store, { user_id: body.user_id ?? 'web-user',
+        const qUser = sessionUser(req);
+        if (!qUser) return send(401, { error: 'LOGIN_REQUIRED', message: '登录后发起头脑风暴' });
+        const q = createQuote(store, { user_id: qUser.user_id,
           model_ids: body.model_ids, bundle_total_cents: body.bundle_total_cents ?? null });
         return send(200, q);
       }
