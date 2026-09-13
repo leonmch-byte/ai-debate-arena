@@ -28,13 +28,21 @@ const teardown = async x => {
 };
 const EMAIL = () => `u${Date.now()}${Math.floor(Math.random() * 1e5)}@test.local`;
 
-test('M10-1 未登录报价 → 401 LOGIN_REQUIRED（§9.2 身份门槛首站）', async t => {
+test('M10-1a 强制登录开关：ARENA_REQUIRE_AUTH=1 时未登录报价 → 401', async t => {
+  process.env.ARENA_REQUIRE_AUTH = '1';
   const x = await fresh();
-  t.after(() => teardown(x));
+  t.after(() => { delete process.env.ARENA_REQUIRE_AUTH; return teardown(x); });
   const r = await x.call('/api/quote', { body: { model_ids: ['kimi'] } });
   assert.equal(r.code, 401);
   assert.equal(r.data.error, 'LOGIN_REQUIRED');
+});
+
+test('M10-1b 默认（开关关闭）：匿名报价放行 200——用户决策"暂不启用强制登录"', async t => {
+  assert.equal(process.env.ARENA_REQUIRE_AUTH, undefined);
+  const x = await fresh();
   t.after(() => teardown(x));
+  const r = await x.call('/api/quote', { body: { model_ids: ['kimi'] } });
+  assert.equal(r.code, 200);
 });
 
 test('M10-2 注册→报价→我的订单可见；错密码/重复邮箱被拒', async t => {
