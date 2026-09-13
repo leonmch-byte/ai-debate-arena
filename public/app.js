@@ -1,4 +1,3 @@
-// UI v3：定位=多 AI 头脑风暴（创业者/企业主/智库/程序员）。铁律不变：金额只渲染后端契约。
 const $ = s => document.querySelector(s);
 const yuan = c => c == null ? '—' : '¥' + (c / 100).toFixed(2);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[ch]));
@@ -23,36 +22,44 @@ function home(models) {
   $('#app').innerHTML = `
   <section class="hero">
     <h1>把你的难题，扔给一桌 AI</h1>
-    <p>你出题，多个 AI <b>各自独立</b>给出方案——然后我们放大它们<b>碰撞出的火花</b>：
-    谁和谁针锋相对、谁的方案被别人挑出漏洞、哪些点意外地全员一致。<br>
+    <p>你出题，多个 AI <b>各自独立</b>给出方案——然后放大它们<b>碰撞出的火花</b>：
+    谁和谁针锋相对、谁的方案被别人挑出漏洞、哪些点全员一致。<br>
     <span class="dim">一个人问 AI 得到一个答案；一桌 AI 互相碰撞，才照出你的盲区。</span></p>
-    <div class="who">
-      <span>适<br>合</span>
-      <b>创业者</b><b>企业主</b><b>智库研究员</b><b>程序员</b>——任何需要被挑战的决策
-    </div>
+    <div class="who"><span>适合</span><b>创业者</b><b>企业主</b><b>智库研究员</b><b>程序员</b></div>
     <ul class="pts">
       <li><b>独立出方案</b>：互不知情，避免互相污染，才有真分歧</li>
-      <li><b>碰撞报告</b>：分歧点 / 被挑出的漏洞 / 意外共识，一目了然</li>
-      <li><b>故障即赔付</b>：任一 AI 故障，退款 / 转额度 / 换 AI，多退少补，全自动</li>
+      <li><b>碰撞报告</b>：分歧点 / 被挑出的漏洞 / 意外共识</li>
+      <li><b>故障即赔付</b>：退款 / 转额度 / 换 AI，多退少补，全自动</li>
     </ul>
   </section>
+  <section class="topic-hero">
+    <label>① 你的议题（越具体，碰撞越有料）</label>
+    <textarea id="topic" rows="3" placeholder="例：我想在二线城市开一家社区自习室，初期预算 15 万。帮我评估该不该做、最大的坑在哪。"></textarea>
+  </section>
   <section class="card">
-    <h2>① 请 AI 上桌（至少 2 位，越多碰撞越烈）</h2>
+    <h2>② 请 AI 上桌（至少 2 位，越多碰撞越烈）</h2>
     <div class="models">${Object.entries(models).map(([id, c]) => `
       <label class="model"><input type="checkbox" value="${id}" data-c="${c}">
         <span>${esc(id)}</span><b>${yuan(c)}</b></label>`).join('')}
     </div>
-    <div class="qbox">
-      <label for="topic">② 你的议题（越具体，碰撞越有料）</label>
-      <textarea id="topic" rows="3" placeholder="例：我想在二线城市开一家社区自习室，初期预算 15 万，帮我评估这个生意该不该做、最大的坑在哪。"></textarea>
-    </div>
     <div class="row"><button id="quote-btn" class="primary big">③ 生成报价</button>
     <span id="quote-err" class="err"></span></div>
+    <p class="byok">已有自己的 AI 账号/密钥？<a id="byok-link">用自带密钥模式 →</a>（即将开放）</p>
   </section>
   <section id="quote-box"></section>`;
   $('#quote-btn').onclick = () => createQuote();
   $('#app').addEventListener('input', updateCount);
+  $('#byok-link').onclick = byokModal;
+  $('#topic').focus();
   updateCount();
+}
+function byokModal() {
+  $('#modal-card').innerHTML = `
+    <h3>自带密钥模式（即将开放）</h3>
+    <p class="dim">用自己的 AI 平台 API Key 召唤模型，平台只收取少量撮合服务费，模型费用直接走你自己的账号。</p>
+    <p class="dim">该模式内测后开放。届时支持：阿里百炼 / 火山方舟 / DeepSeek / OpenAI 兼容接口。</p>
+    <div class="row"><button onclick="hideModal()">知道了</button></div>`;
+  $('#modal').classList.remove('hidden');
 }
 function selected() {
   return [...document.querySelectorAll('.model input:checked')].map(i => ({ id: i.value, c: Number(i.dataset.c) }));
@@ -65,18 +72,19 @@ function updateCount() {
 async function createQuote() {
   const ids = selected().map(x => x.id);
   const topic = ($('#topic')?.value ?? '').trim();
+  if (topic.length < 5) { $('#quote-err').textContent = '先写下你的议题（至少 5 个字）——AI 们要围绕它碰撞'; return; }
   if (!ids.length) { $('#quote-err').textContent = '至少请一位 AI 上桌'; return; }
-  if (topic.length < 5) { $('#quote-err').textContent = '议题请写具体一点（至少 5 个字）'; return; }
   try {
     const q = await api('/api/quote', { method: 'POST', body: JSON.stringify({ model_ids: ids, topic }) });
     sessionStorage.setItem('topic_' + q.order_id, topic);
     $('#quote-err').textContent = '';
     $('#quote-box').innerHTML = `
       <section class="card">
+        <div class="topic-show"><span class="lbl">本次议题</span>${esc(topic)}</div>
         <h2>④ 确认并支付 <small class="dim">报价锁定 15 分钟</small></h2>
         <table><tbody>${q.items.map(i => `<tr><td>${esc(i.model_id)}</td><td>${yuan(i.locked_price_cents)}</td></tr>`).join('')}
         <tr class="total"><td>合计</td><td>${yuan(q.total_cents)}</td></tr></tbody></table>
-        <p class="dim">支付后 AI 们立即各自独立作业。任一故障，你可选退款 / 转额度 / 换 AI，全程自动结算。</p>
+        <p class="dim">支付后 AI 们立即各自独立作业。任一故障，退款 / 转额度 / 换 AI，全程自动结算。</p>
         <div class="row"><button id="pay-btn" class="primary big">确认支付 ${yuan(q.total_cents)}</button>
         <span id="pay-err" class="err"></span></div>
       </section>`;
@@ -101,12 +109,14 @@ function startPolling(orderId) {
 async function renderOrder(v, orderId) {
   const done = v.settlement && !v.decision;
   if (done && poll) { clearInterval(poll); poll = null; }
+  const topic = sessionStorage.getItem('topic_' + orderId) ?? '';
   const withText = await Promise.all(v.items.map(async it => ({ ...it, text: await fetchResult(it.result_ref) })));
   const c = v.collision;
   $('#app').innerHTML = `
     <section class="card">
+      ${topic ? `<div class="topic-show"><span class="lbl">本次议题</span>${esc(topic)}</div>` : ''}
       <p class="status">${ORDER_ZH[v.status] ?? esc(v.status)} <small class="dim">${v.order_id}</small></p>
-      ${c ? collisionCard(c) : (done ? '' : '')}
+      ${c ? collisionCard(c) : ''}
       ${withText.map(it => `
         <div class="opinion ${it.state === 'COMPLETED' ? '' : 'dim-op'}">
           <div class="op-head"><b>${esc(it.model_id)}</b>
@@ -122,17 +132,13 @@ async function renderOrder(v, orderId) {
   if (v.decision) showModal(v.decision, orderId); else hideModal();
 }
 function collisionCard(c) {
-  const block = (title, cls, arr, fmt) => arr.length ? `
-    <div class="col-block ${cls}"><h4>${title}</h4>
-      ${arr.map(fmt).join('')}</div>` : '';
+  const block = (title, cls, arr, fmt) => arr.length ? `<div class="col-block ${cls}"><h4>${title}</h4>${arr.map(fmt).join('')}</div>` : '';
   return `<div class="collision">
     <h3>⚡ 碰撞报告 <small class="dim">AI 们互相碰撞出的东西</small></h3>
     ${block('针锋相对 — 分歧点', 'dis', c.disagreements, d => `
       <div class="pt"><b>${esc(d.topic)}</b>${d.stances.map(s => `<div class="snip"><i>${esc(s.model)}</i>：${esc(s.snippet)}…</div>`).join('')}</div>`)}
-    ${block('被挑出的漏洞', 'hole', c.holes, h => `
-      <div class="pt"><i>${esc(h.raised_by)}</i> 提出：${esc(h.point)}</div>`)}
-    ${block('意外共识', 'con', c.consensuses, k => `
-      <div class="pt"><b>${esc(k.topic)}</b> — ${k.stances.length} 位 AI 一致认为值得注意</div>`)}
+    ${block('被挑出的漏洞', 'hole', c.holes, h => `<div class="pt"><i>${esc(h.raised_by)}</i> 提出：${esc(h.point)}</div>`)}
+    ${block('意外共识', 'con', c.consensuses, k => `<div class="pt"><b>${esc(k.topic)}</b> — ${k.stances.length} 位 AI 一致认为值得注意</div>`)}
     ${(!c.disagreements.length && !c.holes.length && !c.consensuses.length) ? '<p class="dim">本轮意见较为一致，未捕捉到显著碰撞。</p>' : ''}
   </div>`;
 }
