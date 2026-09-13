@@ -152,6 +152,12 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/api/')) return api(req, res, url);
+    if (url.pathname.startsWith('/results/')) {
+      const rp = join(process.cwd(), 'results', url.pathname.slice('/results/'.length));
+      if (existsSync(rp) && rp.startsWith(join(process.cwd(), 'results'))) {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }); return res.end(readFileSync(rp));
+      }
+    }
     let p = url.pathname === '/' ? '/index.html' : url.pathname;
     p = join(PUBLIC_DIR, p);
     if (!p.startsWith(PUBLIC_DIR) || !existsSync(p)) { res.writeHead(404); return res.end('not found'); }
