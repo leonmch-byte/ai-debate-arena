@@ -20,9 +20,12 @@ const fresh = async () => {
     if (sc) cookie = sc.split(';')[0];
     return { code: r.status, data: await r.json().catch(() => ({})) };
   };
-  return { dir, srv, call };
+  return { dir, srv, call, closed: false };
 };
-const teardown = async ({ srv, dir }) => { await srv.close(); rmSync(dir, { recursive: true, force: true }); };
+const teardown = async x => {
+  if (x.closed) return; x.closed = true;
+  await x.srv.close(); rmSync(x.dir, { recursive: true, force: true });
+};
 const EMAIL = () => `u${Date.now()}${Math.floor(Math.random() * 1e5)}@test.local`;
 
 test('M10-1 未登录报价 → 401 LOGIN_REQUIRED（§9.2 身份门槛首站）', async t => {
@@ -31,7 +34,7 @@ test('M10-1 未登录报价 → 401 LOGIN_REQUIRED（§9.2 身份门槛首站）
   const r = await x.call('/api/quote', { body: { model_ids: ['kimi'] } });
   assert.equal(r.code, 401);
   assert.equal(r.data.error, 'LOGIN_REQUIRED');
-  await teardown(x);
+  t.after(() => teardown(x));
 });
 
 test('M10-2 注册→报价→我的订单可见；错密码/重复邮箱被拒', async t => {
@@ -50,7 +53,7 @@ test('M10-2 注册→报价→我的订单可见；错密码/重复邮箱被拒'
   assert.equal(mine.data.orders.length, 1);
   assert.equal(mine.data.orders[0].order_id, q.data.order_id);
   assert.equal(mine.data.orders[0].total_cents, 800);
-  await teardown(x);
+  t.after(() => teardown(x));
 });
 
 test('M10-3 退出后：me 为空、我的订单 401', async t => {
@@ -60,5 +63,5 @@ test('M10-3 退出后：me 为空、我的订单 401', async t => {
   assert.equal((await x.call('/api/auth/logout', { method: 'POST' })).code, 200);
   assert.equal((await x.call('/api/auth/me', { method: 'GET' })).data.user, null);
   assert.equal((await x.call('/api/my/orders', { method: 'GET' })).code, 401);
-  await teardown(x);
+  t.after(() => teardown(x));
 });

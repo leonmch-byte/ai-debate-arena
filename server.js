@@ -158,8 +158,10 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
         return send(200, { price_table_version: PRICE_TABLE_VERSION, models: PRICE_TABLES[PRICE_TABLE_VERSION].models });
       if (req.method === 'POST' && url.pathname === '/api/quote') {
         const qUser = sessionUser(req);
-        if (!qUser) return send(401, { error: 'LOGIN_REQUIRED', message: '登录后发起头脑风暴' });
-        const q = createQuote(store, { user_id: qUser.user_id,
+        const REQUIRE_AUTH = process.env.ARENA_REQUIRE_AUTH === '1';
+        if (!qUser && REQUIRE_AUTH)
+          return send(401, { error: 'LOGIN_REQUIRED', message: '登录后发起头脑风暴' });
+        const q = createQuote(store, { user_id: qUser?.user_id ?? 'anon-' + (sessionUser.anonSeq = (sessionUser.anonSeq ?? 0) + 1),
           model_ids: body.model_ids, bundle_total_cents: body.bundle_total_cents ?? null });
         return send(200, q);
       }
