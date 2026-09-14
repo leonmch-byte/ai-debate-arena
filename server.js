@@ -190,16 +190,12 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
   } };
 }
 
-if (import.meta.url === pathToFileURLCompat(process.argv[1] ?? '')) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const port = Number(process.env.ARENA_PORT ?? 3100);
   const simulateFail = (process.env.ARENA_SIMULATE_FAIL ?? '').split(',').map(s => s.trim()).filter(Boolean);
   startServer({ port, dbPath: process.env.ARENA_DB ?? 'db/arena.db', simulateFail });
   console.log(JSON.stringify({ msg: 'arena server started', port, adapter: process.env.ARENA_ADAPTER ?? 'sandbox', simulate_fail: simulateFail }));
 }
 
-function pathToFileURLCompat(p) {
-  const { pathToFileURL } = require_url();
-  return pathToFileURL(p).href;
-}
-function require_url() { return { pathToFileURL: __pathToFileURL }; }
-import { pathToFileURL as __pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) { /* handled above */ }
