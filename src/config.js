@@ -20,8 +20,10 @@ export const PRICE_TABLE_VERSION = 'pt-2025-09';
 export const PRICE_TABLES = {
   'pt-2025-09': {
     models: {
-      'deepseek-v3': 600, 'qwen-max': 800, 'glm-4-plus': 800,
-      'kimi': 800, 'doubao-pro': 800, 'gpt-4o': 1000, 'claude-sonnet': 1000,
+      'doubao-pro': 800,
+      'kimi-k3': 800,
+      'deepseek-v41': 600,
+      'minimax-m3': 800,
     },
   },
 };

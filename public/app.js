@@ -147,9 +147,8 @@ async function createQuote() {
 }
 async function payAndRun(orderId, topic) {
   try {
-    await api(`/api/orders/${orderId}/pay`, { method: 'POST' });
+    await api(`/api/orders/${orderId}/pay`, { method: 'POST', body: JSON.stringify({ topic }) });
     $('#pay-err').textContent = '支付成功，AI 们开始各自作业…';
-    await api(`/api/orders/${orderId}/run`, { method: 'POST', body: JSON.stringify({ topic }) });
     startPolling(orderId);
   } catch (e) { $('#pay-err').textContent = e.message; }
 }

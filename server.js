@@ -56,11 +56,11 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
     if (allTerminal && !openDec) previewSettlement(store, orderId);
   }
 
-  let lastTopic = '';
+  const topicsByOrder = {};
 
   async function driveOrder(orderId, topic = '') {
-    if (topic) lastTopic = topic;
-    const prompt = lastTopic ? `议题：${lastTopic}\n\n请围绕该议题给出你的独立专业意见，直接作答，不要索要更多信息。` : undefined;
+    if (topic) topicsByOrder[orderId] = topic;
+    const prompt = topicsByOrder[orderId] ? `议题：${lastTopic}\n\n请围绕该议题给出你的独立专业意见，直接作答，不要索要更多信息。` : undefined;
     for (const it of projectItems(store.getOrder(orderId)).values())
       if (it.state === 'QUOTED' || it.state === 'LOCKED')
         await fulfillItem(store, orderId, it.item_id, modelFor(store.getOrder(orderId), it.item_id), adapter, { input: { prompt } });
@@ -178,7 +178,8 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
       }
       if ((m = url.pathname.match(/^\/api\/orders\/(ord_\w+)\/pay$/)) && req.method === 'POST') {
         const r = await confirmPayment(store, m[1], { channel });
-        setImmediate(() => driveOrder(m[1]).catch(e => log('drive error:', e.message)));
+        if (body.topic) topicsByOrder[m[1]] = body.topic;
+        setImmediate(() => driveOrder(m[1], topicsByOrder[m[1]] ?? '').catch(e => log('drive error:', e.message)));
         return send(200, { ...r, async: true });
       }
       if ((m = url.pathname.match(/^\/api\/orders\/(ord_\w+)\/run$/)) && req.method === 'POST') {
@@ -194,7 +195,7 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
         else if (choice === 'REPLACE') {
           if (!model_id) return send(400, { error: 'MODEL_REQUIRED' });
           const r = await executeReplaceChoice(store, orderId, itemId, model_id, channel);
-          const sprompt = lastTopic ? `议题：${lastTopic}\n\n请围绕该议题给出你的独立专业意见，直接作答。` : undefined;
+          const sprompt = topicsByOrder[orderId] ? `议题：${lastTopic}\n\n请围绕该议题给出你的独立专业意见，直接作答。` : undefined;
           await fulfillItem(store, orderId, r.successor_item_id, model_id, adapter, { input: { prompt: sprompt } });
           const succ = projectItems(store.getOrder(orderId)).get(r.successor_item_id);
           if (succ.state === 'FAILED_FINAL') openDecision(store, orderId, succ.item_id);
