@@ -8,6 +8,9 @@ import { join } from 'node:path';
 const MODEL_MAP = {
   'qwen-max':   { provider: 'dashscope', model: 'qwen-max' },
   'glm-4-plus': { provider: 'zhipu',     model: 'glm-4-plus' },
+  'kimi-k3':        { provider: 'tokenhub', model: 'kimi-k3' },
+  'deepseek-v41':   { provider: 'tokenhub', model: 'deepseek-v4.1-flash' },
+  'minimax-m3':     { provider: 'tokenhub', model: 'minimax-m3' },
   'doubao-pro': { provider: 'ark',       model: () => this_endpoint() },
 };
 function this_endpoint() {
@@ -42,6 +45,7 @@ export class RealAdapter {
     if (provider === 'ark') return !!(this.#get('ARK_API_KEY') && this.#get('ARK_ENDPOINT'));
     if (provider === 'dashscope') return !!this.#get('DASHSCOPE_API_KEY');
     if (provider === 'zhipu') return !!this.#get('ZHIPU_API_KEY');
+    if (provider === 'tokenhub') return !!this.#get('TOKENHUB_API_KEY');
     return false;
   }
   #fail(reason_code, raw) { return { ok: false, reason_code, raw }; }
@@ -53,22 +57,26 @@ export class RealAdapter {
       return this.#fail('MODEL_AUTH_FAILURE', { error: `${conf.provider} 凭证未配置（~/.arena_env）` });
 
     const isArk = conf.provider === 'ark';
-    const url = isArk
+    const isTH = conf.provider === 'tokenhub';
+    const url = isTH
+      ? 'https://tokenhub.tencentmaas.com/v1/chat/completions'
+      : isArk
       ? 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'
       : conf.provider === 'zhipu' ? 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
       : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-    const key = isArk ? this.#get('ARK_API_KEY') : (conf.provider === 'zhipu' ? this.#get('ZHIPU_API_KEY') : this.#get('DASHSCOPE_API_KEY'));
+    const key = isArk ? this.#get('ARK_API_KEY') : isTH ? this.#get('TOKENHUB_API_KEY') : (conf.provider === 'zhipu' ? this.#get('ZHIPU_API_KEY') : this.#get('DASHSCOPE_API_KEY'));
     const model = typeof conf.model === 'function' ? conf.model() : conf.model;
     if (!model) return this.#fail('MODEL_AUTH_FAILURE', { error: '接入点 ID 缺失' });
 
-    const body = JSON.stringify({
+    const bodyObj = {
       model,
       messages: [
         { role: 'system', content: input.system ?? '你是多模型头脑风暴团队的成员之一，请就用户议题给出你的独立专业意见。' },
         { role: 'user', content: input.prompt ?? '请就当前议题给出你的专业意见。' },
       ],
-      temperature: 0.7,
-    });
+    };
+    if (!isTH) bodyObj.temperature = 0.7;   // tokenhub 聚合模型有各自参数限制，用默认
+    const body = JSON.stringify(bodyObj);
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
