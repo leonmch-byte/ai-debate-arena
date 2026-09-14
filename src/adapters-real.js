@@ -41,6 +41,7 @@ export class RealAdapter {
   #ready(provider) {
     if (provider === 'ark') return !!(this.#get('ARK_API_KEY') && this.#get('ARK_ENDPOINT'));
     if (provider === 'dashscope') return !!this.#get('DASHSCOPE_API_KEY');
+    if (provider === 'zhipu') return !!this.#get('ZHIPU_API_KEY');
     return false;
   }
   #fail(reason_code, raw) { return { ok: false, reason_code, raw }; }
@@ -54,8 +55,9 @@ export class RealAdapter {
     const isArk = conf.provider === 'ark';
     const url = isArk
       ? 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'
+      : conf.provider === 'zhipu' ? 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
       : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-    const key = isArk ? this.#get('ARK_API_KEY') : this.#get('DASHSCOPE_API_KEY');
+    const key = isArk ? this.#get('ARK_API_KEY') : (conf.provider === 'zhipu' ? this.#get('ZHIPU_API_KEY') : this.#get('DASHSCOPE_API_KEY'));
     const model = typeof conf.model === 'function' ? conf.model() : conf.model;
     if (!model) return this.#fail('MODEL_AUTH_FAILURE', { error: '接入点 ID 缺失' });
 
