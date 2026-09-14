@@ -47,8 +47,8 @@ export class RealAdapter {
     const body = JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: '你是多模型联合评审团的成员之一，请就用户问题给出你的独立专业意见。' },
-        { role: 'user', content: input.prompt ?? '请给出你对当前议题的专业意见。' },
+        { role: 'system', content: input.system ?? '你是多模型头脑风暴团队的成员之一，请就用户议题给出你的独立专业意见。' },
+        { role: 'user', content: input.prompt ?? '请就当前议题给出你的专业意见。' },
       ],
       temperature: 0.7,
     });
