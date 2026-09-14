@@ -12,6 +12,7 @@ import { projectItems, projectOrder, ITEM_TERMINAL } from './src/orders.js';
 import { openDecision, executeRefundChoice, executeVoucherChoice, executeReplaceChoice } from './src/decisions.js';
 import { previewSettlement } from './src/settlement.js';
 import { PRICE_TABLES, PRICE_TABLE_VERSION } from './src/config.js';
+import { RealAdapter } from './src/adapters-real.js';
 import { Auth } from './src/auth.js';
 import { buildCollisionReport } from './src/collision.js';
 
@@ -24,7 +25,8 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
   const channel = new SandboxChannel();
   // 模拟适配器（M9 换真实 providers.js，M4 已定接口契约）：
   // simulateFail 中的模型按 B 类永久失败（不进恢复环，直达决策弹窗，演示路径最短）
-  const adapter = {
+  const realAdapter = new RealAdapter({ log });
+  const adapter = process.env.ARENA_ADAPTER === 'real' ? realAdapter : {
     async run(model_id) {
       if (simulateFail.includes(model_id))
         return { ok: false, reason_code: 'MODEL_AUTH_FAILURE', raw: { simulated: true } };
