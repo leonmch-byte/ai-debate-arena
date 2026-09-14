@@ -67,3 +67,7 @@ nav a, #auth-box a { cursor:pointer; }
 .frow input { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:14px inherit; background:#fbfcfe; }
 .frow input:focus { outline:none; border-color:var(--pri); }
 .olink { color:var(--pri); text-decoration:none; }
+/* v5: paid confirmation + export */
+.paid-ok { text-align:center; padding:30px 20px; }
+.paid-mark { font-size:34px; color:var(--ok); font-weight:800; }
+.paid-line { font-size:16px; margin:12px 0 6px; }

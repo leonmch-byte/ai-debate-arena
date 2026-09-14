@@ -148,7 +148,13 @@ async function createQuote() {
 async function payAndRun(orderId, topic) {
   try {
     await api(`/api/orders/${orderId}/pay`, { method: 'POST', body: JSON.stringify({ topic }) });
-    $('#pay-err').textContent = '支付成功，AI 们开始各自作业…';
+    $('#quote-box').innerHTML = `
+      <section class="card paid-ok">
+        <div class="paid-mark">✓ 已支付</div>
+        <p class="paid-line">AI 们已收到议题，正在各自独立思考——互不知情，互不干扰。</p>
+        <p class="dim">完成后本页自动更新，可直接导出报告。</p>
+      </section>`;
+    $('#quote-box').scrollIntoView({ behavior: 'smooth' });
     startPolling(orderId);
   } catch (e) { $('#pay-err').textContent = e.message; }
 }
@@ -180,9 +186,13 @@ async function renderOrder(v, orderId) {
                     : it.state === 'RUNNING' ? `<p class="dim typing">正在独立思考…</p>` : ''}
         </div>`).join('')}
       ${v.settlement ? settle(v.settlement) : ''}
-      <div class="row"><button id="back" class="ghost">← 发起新的风暴</button></div>
+      <div class="row">
+        <button id="back" class="ghost">← 发起新的风暴</button>
+        <button id="export-btn" class="ghost">⬇ 导出报告</button>
+      </div>
     </section>`;
   $('#back').onclick = () => { if (poll) { clearInterval(poll); poll = null; } location.hash = ''; boot(); };
+  $('#export-btn').onclick = () => exportReport(v, orderId);
   if (v.decision) showModal(v.decision, orderId); else hideModal();
 }
 function collisionCard(c) {
@@ -195,6 +205,53 @@ function collisionCard(c) {
     ${block('意外共识', 'con', c.consensuses, k => `<div class="pt"><b>${esc(k.topic)}</b> — ${k.stances.length} 位 AI 一致认为值得注意</div>`)}
     ${(!c.disagreements.length && !c.holes.length && !c.consensuses.length) ? '<p class="dim">本轮意见较为一致，未捕捉到显著碰撞。</p>' : ''}
   </div>`;
+}
+function exportReport(v, orderId) {
+  const topic = sessionStorage.getItem('topic_' + orderId) ?? '';
+  const zh = s => ({ COMPLETED:'✓ 已交方案', REFUNDED:'已退款', TIMEOUT_REFUNDED:'超时自动退款', REPLACED:'已更换', VOUCHERED:'已转额度', RUNNING:'思考中' }[s] ?? s);
+  const lines = [];
+  lines.push(`# 多 AI 头脑风暴报告`);
+  lines.push(``);
+  lines.push(`- 订单：${orderId}`);
+  if (topic) lines.push(`- 议题：${topic}`);
+  lines.push(`- 状态：${ORDER_ZH[v.status] ?? v.status}`);
+  lines.push(``);
+  if (v.collision) {
+    lines.push(`## ⚡ 碰撞报告`);
+    for (const d of v.collision.disagreements ?? []) {
+      lines.push(`### 分歧：${d.topic}`);
+      for (const st of d.stances) lines.push(`- **${st.model}**：${st.snippet}…`);
+    }
+    for (const h of v.collision.holes ?? []) lines.push(`- 漏洞（${h.raised_by} 提出）：${h.point}`);
+    for (const k of v.collision.consensuses ?? []) lines.push(`- 共识：${k.topic}（${k.stances.length} 位一致）`);
+    lines.push(``);
+  }
+  for (const it of v.items) {
+    lines.push(`## ${it.model_id}（${zh(it.state) ?? it.state}，${yuan(it.locked_price_cents)}）`);
+    lines.push(``);
+  }
+  if (v.settlement) {
+    lines.push(`## 账单`);
+    lines.push(`- 订单总额：${yuan(v.settlement.order_total_locked_cents)}`);
+    if (v.settlement.refunded_cash_cents) lines.push(`- 已退款：${yuan(v.settlement.refunded_cash_cents)}`);
+    lines.push(`- 最终应收：${yuan(v.settlement.final_due_cents)}`);
+    lines.push(`- balance：${v.settlement.balance_cents}`);
+  }
+  lines.push(``);
+  lines.push(`---`);
+  lines.push(`由「多 AI 头脑风暴」生成 · ${new Date().toLocaleString('zh-CN')}`);
+  // 拉取各意见全文后合并下载
+  Promise.all(v.items.map(it => fetchResult(it.result_ref).then(t => ({ id: it.item_id, text: t }))))
+    .then(texts => {
+      for (const t of texts) if (t.text) {
+        const idx = lines.findIndex(l => l.startsWith('## ') && v.items.some(i => i.model_id && l.includes(i.model_id)));
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `头脑风暴报告-${orderId}.md`;
+      a.click(); URL.revokeObjectURL(a.href);
+    });
 }
 function settle(s) {
   return `<div class="settle"><h3>账单（每一分钱可追溯，balance 恒为 0）</h3><table><tbody>
