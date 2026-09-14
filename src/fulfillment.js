@@ -20,6 +20,7 @@ export function classifyFailure(reason_code) {
 // 适配器契约（M7 接真实 providers.js 时实现同一接口）：
 //   run(model_id, input) → { ok: true, result_ref } | { ok: false, reason_code, raw? }
 export async function fulfillItem(store, orderId, itemId, modelId, adapter, opts = {}) {
+  const baseInput = opts.input ?? {};   // 议题/角色 prompt 经此透传给适配器
   const backoffMs = opts.backoffMs ?? 1000;   // 测试传 0 跳过真实退避
   const maxAttempts = SLA.RECOVERY_MAX_ATTEMPTS;
 
@@ -35,7 +36,7 @@ export async function fulfillItem(store, orderId, itemId, modelId, adapter, opts
   let lastRaw = null;
 
   while (true) {
-    const res = await adapter.run(modelId, corrected ? { corrected: true } : {});
+    const res = await adapter.run(modelId, { ...baseInput, ...(corrected ? { corrected: true } : {}) });
     if (res.ok) {
       appendGuarded(store, orderId, store.getOrder(orderId),
         [{ type: 'ITEM_COMPLETED', item_id: itemId, data: { result_ref: res.result_ref } }]);  // T5

@@ -58,7 +58,10 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
     if (topic) lastTopic = topic;
     for (const it of projectItems(store.getOrder(orderId)).values())
       if (it.state === 'QUOTED' || it.state === 'LOCKED')
-        await fulfillItem(store, orderId, it.item_id, modelFor(store.getOrder(orderId), it.item_id), adapter);
+        const prompt = lastTopic ? \`议题：\${lastTopic}\
+\
+请围绕该议题给出你的独立专业意见，直接作答，不要索要更多信息。\` : undefined;
+        await fulfillItem(store, orderId, it.item_id, modelFor(store.getOrder(orderId), it.item_id), adapter, { input: { prompt } });
     const h = store.getOrder(orderId);
     for (const it of projectItems(h).values())
       if (it.state === 'FAILED_FINAL' && !it.pending_decision && !it.resolved_choice)
@@ -188,7 +191,10 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
         else if (choice === 'REPLACE') {
           if (!model_id) return send(400, { error: 'MODEL_REQUIRED' });
           const r = await executeReplaceChoice(store, orderId, itemId, model_id, channel);
-          await fulfillItem(store, orderId, r.successor_item_id, model_id, adapter);
+          const sprompt = lastTopic ? \`议题：\${lastTopic}\
+\
+请围绕该议题给出你的独立专业意见，直接作答。\` : undefined;
+          await fulfillItem(store, orderId, r.successor_item_id, model_id, adapter, { input: { prompt: sprompt } });
           const succ = projectItems(store.getOrder(orderId)).get(r.successor_item_id);
           if (succ.state === 'FAILED_FINAL') openDecision(store, orderId, succ.item_id);  // 后继又失败 → 再开决策
         } else return send(400, { error: 'INVALID_CHOICE' });
