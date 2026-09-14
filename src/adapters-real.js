@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 const MODEL_MAP = {
   'qwen-max':   { provider: 'dashscope', model: 'qwen-max' },
+  'glm-4-plus': { provider: 'zhipu',     model: 'glm-4-plus' },
   'doubao-pro': { provider: 'ark',       model: () => this_endpoint() },
 };
 function this_endpoint() {
