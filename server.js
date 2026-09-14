@@ -14,6 +14,7 @@ import { previewSettlement } from './src/settlement.js';
 import { PRICE_TABLES, PRICE_TABLE_VERSION } from './src/config.js';
 import { buildCollisionReport } from './src/collision.js';
 import { RealAdapter } from './src/adapters-real.js';
+import { Auth } from './src/auth.js';
 
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.md': 'text/plain; charset=utf-8' };
@@ -21,6 +22,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulateFail = [], log = (...a) => console.log(...a) } = {}) {
   const store = new EventStore(dbPath);
   const channel = new SandboxChannel();
+  const auth = new Auth(store);
 
   const realAdapter = new RealAdapter({ log });
   const adapter = process.env.ARENA_ADAPTER === 'real' ? realAdapter : {
@@ -107,6 +109,11 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
     };
   }
 
+  function sessionUser(req) {
+    const m = (req.headers.cookie || '').match(/arena_session=([a-f0-9]+)/);
+    return m ? auth.verify(m[1]) : null;
+  }
+
   const readBody = req => new Promise((resolve, reject) => {
     let s = '';
     req.on('data', d => { s += d; if (s.length > 1e6) req.destroy(); });
@@ -126,8 +133,42 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
         return send(200, { ok: true, orders: store.getAllOrderIds().filter(x => x !== 'ord_system').length });
       if (req.method === 'GET' && url.pathname === '/api/models')
         return send(200, { price_table_version: PRICE_TABLE_VERSION, models: PRICE_TABLES[PRICE_TABLE_VERSION].models });
+      if (req.method === 'POST' && url.pathname === '/api/auth/register') {
+        const u = auth.register(body.email, body.password);
+        const ses = auth.login(body.email, body.password);
+        res.setHeader('Set-Cookie', 'arena_session=' + ses.token + '; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax');
+        return send(200, { user: u });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/auth/login') {
+        const ses = auth.login(body.email, body.password);
+        const u = auth.verify(ses.token);
+        res.setHeader('Set-Cookie', 'arena_session=' + ses.token + '; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax');
+        return send(200, { user: u });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
+        const cm = (req.headers.cookie || '').match(/arena_session=([a-f0-9]+)/);
+        if (cm) auth.logout(cm[1]);
+        res.setHeader('Set-Cookie', 'arena_session=; HttpOnly; Path=/; Max-Age=0');
+        return send(200, { ok: true });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/auth/me')
+        return send(200, { user: sessionUser(req) });
+      if (req.method === 'GET' && url.pathname === '/api/my/orders') {
+        const u = sessionUser(req);
+        if (!u) return send(401, { error: 'LOGIN_REQUIRED' });
+        const orders = store.getEventsByType('QUOTE_CREATED')
+          .filter(e => e.data && e.data.user_id === u.user_id)
+          .map(e => ({ order_id: e.order_id, created_at: e.occurred_at,
+                       total_cents: e.data.total_cents, status: projectOrder(store.getOrder(e.order_id)) }))
+          .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        return send(200, { orders });
+      }
       if (req.method === 'POST' && url.pathname === '/api/quote') {
-        const q = createQuote(store, { user_id: body.user_id ?? 'anon-web',
+        const qUser = sessionUser(req);
+        if (!qUser && process.env.ARENA_REQUIRE_AUTH === '1')
+          return send(401, { error: 'LOGIN_REQUIRED', message: '登录后发起头脑风暴' });
+        const anonSeq = (sessionUser.anonSeq = (sessionUser.anonSeq || 0) + 1);
+        const q = createQuote(store, { user_id: qUser ? qUser.user_id : ('anon-' + anonSeq),
           model_ids: body.model_ids, bundle_total_cents: body.bundle_total_cents ?? null });
         return send(200, q);
       }
@@ -137,10 +178,12 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
       }
       if ((m = url.pathname.match(/^\/api\/orders\/(ord_\w+)\/pay$/)) && req.method === 'POST') {
         const r = await confirmPayment(store, m[1], { channel });
-        return send(200, r);
+        setImmediate(() => driveOrder(m[1]).catch(e => log('drive error:', e.message)));
+        return send(200, { ...r, async: true });
       }
       if ((m = url.pathname.match(/^\/api\/orders\/(ord_\w+)\/run$/)) && req.method === 'POST') {
-        await driveOrder(m[1], body.topic ?? '');
+        if (body.topic) lastTopic = body.topic;
+        driveOrder(m[1], body.topic ?? '').catch(e => log('drive error:', e.message));
         return send(200, orderView(m[1]));
       }
       if ((m = url.pathname.match(/^\/api\/orders\/(ord_\w+)\/items\/(itm_\w+)\/decision$/)) && req.method === 'POST') {
