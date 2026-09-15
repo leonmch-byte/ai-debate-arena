@@ -1,8 +1,8 @@
-// v3 HTTP 网关。装配各引擎模块；网关零业务判断——状态推导/守卫/金额全在引擎层。
+// v3 HTTP 网关。装配各引擎模块；网关零业务判断。
 import http from 'node:http';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { EventStore, StoreError } from './src/store.js';
 import { SandboxChannel } from './src/payments.js';
 import { createQuote } from './src/pricing.js';
@@ -15,6 +15,7 @@ import { PRICE_TABLES, PRICE_TABLE_VERSION } from './src/config.js';
 import { buildCollisionReport } from './src/collision.js';
 import { RealAdapter } from './src/adapters-real.js';
 import { Auth } from './src/auth.js';
+import { Growth } from './src/growth.js';
 
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.md': 'text/plain; charset=utf-8' };
@@ -23,13 +24,14 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
   const store = new EventStore(dbPath);
   const channel = new SandboxChannel();
   const auth = new Auth(store);
+  const growth = new Growth(store);
 
   const realAdapter = new RealAdapter({ log });
   const adapter = process.env.ARENA_ADAPTER === 'real' ? realAdapter : {
     async run(model_id, input = {}) {
       if (simulateFail.includes(model_id))
         return { ok: false, reason_code: 'MODEL_AUTH_FAILURE', raw: { simulated: true } };
-      const text = `【沙箱演示意见】针对该议题：从市场与执行双角度看，机会存在但窗口有限，建议先以最小成本验证核心假设；主要风险在于投入节奏与团队能力匹配，若确认可行，可小步快跑。`;
+      const text = '【沙箱演示意见】针对该议题：从市场与执行双角度看，机会存在但窗口有限，建议先以最小成本验证核心假设；主要风险在于投入节奏与团队能力匹配，若确认可行，可小步快跑。';
       mkdirSync('results', { recursive: true });
       const ref = `sim-${model_id}-${Date.now()}.md`;
       writeFileSync(join('results', ref), `# ${model_id} 的意见\n\n${text}\n`);
@@ -58,9 +60,29 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
 
   const topicsByOrder = {};
 
+  function buildPrompt(topic) {
+    if (!topic) return undefined;
+    return [
+      '你是一名受邀参加「多 AI 头脑风暴」的独立顾问。用户会将一个具体难题交给多位互不知情的 AI 分别作答，平台随后汇总各 AI 的意见并标注分歧点、被挑出的漏洞与意外共识。',
+      '',
+      `本次议题：${topic}`,
+      '',
+      '作答要求：',
+      '1. 直接作答，不要索要更多信息——缺什么就基于合理假设作答，并明确标注「假设：…」。',
+      '2. 按以下结构输出：',
+      '   【核心判断】2-3 句，旗帜鲜明（可行/不可行/有条件可行）',
+      '   【关键依据】3-5 条，每条一行，给出理由或数据',
+      '   【主要风险】2-3 条，每条附带你估计的严重程度（高/中/低）',
+      '   【行动建议】3-5 条可立即执行的步骤',
+      '   【我可能与他人不同的观点】1-2 条你认为其他顾问容易忽略或反对的角度',
+      '3. 观点要鲜明。本产品的价值在于 AI 之间的真实分歧——请不要说"取决于具体情况"这类骑墙话；有倾向就亮出倾向。',
+      '4. 事实与推测分开：数据没有把握时标注「推测」。',
+    ].join('\n');
+  }
+
   async function driveOrder(orderId, topic = '') {
     if (topic) topicsByOrder[orderId] = topic;
-    const prompt = topicsByOrder[orderId] ? `议题：${lastTopic}\n\n请围绕该议题给出你的独立专业意见，直接作答，不要索要更多信息。` : undefined;
+    const prompt = buildPrompt(topicsByOrder[orderId]);
     for (const it of projectItems(store.getOrder(orderId)).values())
       if (it.state === 'QUOTED' || it.state === 'LOCKED')
         await fulfillItem(store, orderId, it.item_id, modelFor(store.getOrder(orderId), it.item_id), adapter, { input: { prompt } });
@@ -110,7 +132,7 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
   }
 
   function sessionUser(req) {
-    const m = (req.headers.cookie || '').match(/arena_session=([a-f0-9]+)/);
+    const m = (req.headers.cookie ?? '').match(/(?:^|;\s*)arena_session=([a-f0-9]+)/);
     return m ? auth.verify(m[1]) : null;
   }
 
@@ -133,42 +155,87 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
         return send(200, { ok: true, orders: store.getAllOrderIds().filter(x => x !== 'ord_system').length });
       if (req.method === 'GET' && url.pathname === '/api/models')
         return send(200, { price_table_version: PRICE_TABLE_VERSION, models: PRICE_TABLES[PRICE_TABLE_VERSION].models });
+
       if (req.method === 'POST' && url.pathname === '/api/auth/register') {
+        const day = new Date().toISOString().slice(0, 10);
+        let inviteCode = null;
+        if (growth.get('BETA_MODE') === 'true') {
+          const pre = growth.consumeInvite(body.invite_code, 'pending', day);
+          if (!pre.ok) return send(400, { error: 'INVITE_INVALID', message: pre.reason });
+          inviteCode = body.invite_code;
+        }
         const u = auth.register(body.email, body.password);
+        if (inviteCode) {
+          growth.db.prepare('UPDATE invites SET used_by = ?, used_at = ? WHERE code = ? AND day = ?')
+            .run(u.user_id, new Date().toISOString(), inviteCode, day);
+        } else {
+          growth.grantTrials(u.user_id);
+        }
         const ses = auth.login(body.email, body.password);
-        res.setHeader('Set-Cookie', 'arena_session=' + ses.token + '; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax');
-        return send(200, { user: u });
+        res.setHeader('Set-Cookie', `arena_session=${ses.token}; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax`);
+        return send(200, { user: u, trials: growth.trialsLeft(u.user_id) });
       }
       if (req.method === 'POST' && url.pathname === '/api/auth/login') {
         const ses = auth.login(body.email, body.password);
         const u = auth.verify(ses.token);
-        res.setHeader('Set-Cookie', 'arena_session=' + ses.token + '; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax');
-        return send(200, { user: u });
+        res.setHeader('Set-Cookie', `arena_session=${ses.token}; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax`);
+        return send(200, { user: u, trials: growth.trialsLeft(u.user_id) });
       }
       if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
-        const cm = (req.headers.cookie || '').match(/arena_session=([a-f0-9]+)/);
+        const cm = (req.headers.cookie ?? '').match(/arena_session=([a-f0-9]+)/);
         if (cm) auth.logout(cm[1]);
         res.setHeader('Set-Cookie', 'arena_session=; HttpOnly; Path=/; Max-Age=0');
         return send(200, { ok: true });
       }
-      if (req.method === 'GET' && url.pathname === '/api/auth/me')
-        return send(200, { user: sessionUser(req) });
+      if (req.method === 'GET' && url.pathname === '/api/auth/me') {
+        const u = sessionUser(req);
+        return send(200, { user: u, trials: u ? growth.trialsLeft(u.user_id) : null, beta_mode: growth.get('BETA_MODE') });
+      }
       if (req.method === 'GET' && url.pathname === '/api/my/orders') {
         const u = sessionUser(req);
         if (!u) return send(401, { error: 'LOGIN_REQUIRED' });
         const orders = store.getEventsByType('QUOTE_CREATED')
-          .filter(e => e.data && e.data.user_id === u.user_id)
+          .filter(e => e.data?.user_id === u.user_id)
           .map(e => ({ order_id: e.order_id, created_at: e.occurred_at,
                        total_cents: e.data.total_cents, status: projectOrder(store.getOrder(e.order_id)) }))
           .sort((a, b) => b.created_at.localeCompare(a.created_at));
         return send(200, { orders });
       }
+      if (req.method === 'POST' && url.pathname === '/api/feedback') {
+        const u = sessionUser(req);
+        const ok = growth.addFeedback(u?.user_id ?? null, body.order_id ?? null, body.tag, body.note);
+        return ok ? send(200, { ok: true }) : send(400, { error: 'INVALID_TAG' });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/admin/growth') {
+        const u = sessionUser(req);
+        if (!u) return send(401, { error: 'LOGIN_REQUIRED' });
+        const day = new Date().toISOString().slice(0, 10);
+        return send(200, {
+          beta_mode: growth.get('BETA_MODE'),
+          today_code: growth.todayCode(day),
+          invites_used: store.db.prepare("SELECT COUNT(*) AS n FROM invites WHERE day = ? AND used_by IS NOT NULL").get(day).n,
+          feedback_stats: growth.feedbackStats(),
+        });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/admin/beta-mode') {
+        const u = sessionUser(req);
+        if (!u) return send(401, { error: 'LOGIN_REQUIRED' });
+        growth.set('BETA_MODE', body.enabled ? 'true' : 'false');
+        return send(200, { ok: true, beta_mode: growth.get('BETA_MODE') });
+      }
+
       if (req.method === 'POST' && url.pathname === '/api/quote') {
         const qUser = sessionUser(req);
-        if (!qUser && process.env.ARENA_REQUIRE_AUTH === '1')
+        const REQUIRE_AUTH = process.env.ARENA_REQUIRE_AUTH === '1';
+        if (!qUser && REQUIRE_AUTH)
           return send(401, { error: 'LOGIN_REQUIRED', message: '登录后发起头脑风暴' });
-        const anonSeq = (sessionUser.anonSeq = (sessionUser.anonSeq || 0) + 1);
-        const q = createQuote(store, { user_id: qUser ? qUser.user_id : ('anon-' + anonSeq),
+        if (qUser) {
+          const t = growth.trialsLeft(qUser.user_id);
+          if (t.left <= 0 && process.env.ARENA_ADAPTER === 'real')
+            return send(402, { error: 'TRIALS_EXHAUSTED', message: '免费体验已用完（3/3），继续召唤众智请付费', left: 0 });
+        }
+        const anonSeq = (sessionUser.anonSeq = (sessionUser.anonSeq ?? 0) + 1);
+        const q = createQuote(store, { user_id: qUser?.user_id ?? ('anon-' + anonSeq),
           model_ids: body.model_ids, bundle_total_cents: body.bundle_total_cents ?? null });
         return send(200, q);
       }
@@ -183,7 +250,7 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
         return send(200, { ...r, async: true });
       }
       if ((m = url.pathname.match(/^\/api\/orders\/(ord_\w+)\/run$/)) && req.method === 'POST') {
-        if (body.topic) lastTopic = body.topic;
+        if (body.topic) topicsByOrder[m[1]] = body.topic;
         driveOrder(m[1], body.topic ?? '').catch(e => log('drive error:', e.message));
         return send(200, orderView(m[1]));
       }
@@ -195,7 +262,7 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
         else if (choice === 'REPLACE') {
           if (!model_id) return send(400, { error: 'MODEL_REQUIRED' });
           const r = await executeReplaceChoice(store, orderId, itemId, model_id, channel);
-          const sprompt = topicsByOrder[orderId] ? `议题：${lastTopic}\n\n请围绕该议题给出你的独立专业意见，直接作答。` : undefined;
+          const sprompt = buildPrompt(topicsByOrder[orderId]);
           await fulfillItem(store, orderId, r.successor_item_id, model_id, adapter, { input: { prompt: sprompt } });
           const succ = projectItems(store.getOrder(orderId)).get(r.successor_item_id);
           if (succ.state === 'FAILED_FINAL') openDecision(store, orderId, succ.item_id);
@@ -240,6 +307,3 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   startServer({ port, dbPath: process.env.ARENA_DB ?? 'db/arena.db', simulateFail });
   console.log(JSON.stringify({ msg: 'arena server started', port, adapter: process.env.ARENA_ADAPTER ?? 'sandbox', simulate_fail: simulateFail }));
 }
-
-import { pathToFileURL } from 'node:url';
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) { /* handled above */ }
