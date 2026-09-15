@@ -23,7 +23,7 @@ export const PRICE_TABLES = {
       'doubao-pro': 800,
       'kimi-k3': 800,
       'deepseek-v41': 600,
-      'minimax-m3': 800,
+      'minimax-m3': 1000,
     },
   },
 };

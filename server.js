@@ -26,7 +26,7 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
   const channel = new SandboxChannel();
   const auth = new Auth(store);
   const growth = new Growth(store);
-  if (opts.betaMode) growth.set('BETA_MODE', opts.betaMode);
+  if (betaMode) growth.set('BETA_MODE', betaMode);
   const registry = new Registry(store);
 
   const realAdapter = new RealAdapter({ log, registry });
