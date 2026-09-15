@@ -44,8 +44,8 @@ test('M5-1 结转代数四方向（§2.5 金样本）', () => {
 });
 
 test('M5-2 弹窗契约：金额预计算、候选全集、超时默认（§4.4）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['qwen-max']);
-  await failItem(store, orderId, items[0].item_id, 'qwen-max');
+  const { store, dir, orderId, items } = await paidOrder(['doubao-pro']);
+  await failItem(store, orderId, items[0].item_id, 'doubao-pro');
   const p = openDecision(store, orderId, items[0].item_id);
   assert.equal(p.failed_item.locked_price_cents, 800);
   assert.deepEqual(p.funding, { cash_cents: 800, credit_cents: 0 });
@@ -54,9 +54,9 @@ test('M5-2 弹窗契约：金额预计算、候选全集、超时默认（§4.4�
   assert.equal(p.options[1].type, 'VOUCHER');
   assert.equal(p.options[1].credit_cents, 800);
   const reps = p.options[2].candidates;
-  assert.equal(reps.find(c => c.model_id === 'gpt-4o').delta_cents, 200);
-  assert.equal(reps.find(c => c.model_id === 'deepseek-v3').delta_cents, -200);
-  assert.equal(reps.find(c => c.model_id === 'kimi').delta_cents, 0);
+  assert.equal(reps.find(c => c.model_id === 'minimax-m3').delta_cents, 200);
+  assert.equal(reps.find(c => c.model_id === 'deepseek-v41').delta_cents, -200);
+  assert.equal(reps.find(c => c.model_id === 'kimi-k3').delta_cents, 0);
   assert.equal(p.default_on_timeout, 'REFUND');
   assert.ok(new Date(p.expires_at) > new Date());
   cleanup(store, dir);
@@ -64,9 +64,9 @@ test('M5-2 弹窗契约：金额预计算、候选全集、超时默认（§4.4�
 
 test('M5-3 选退款：现金单退现金 / 纯券单发补偿券（T7/§2.4/§5.4）', async () => {
   {
-    const { store, dir, orderId, items } = await paidOrder(['qwen-max']);
+    const { store, dir, orderId, items } = await paidOrder(['doubao-pro']);
     const it = items[0].item_id;
-    await failItem(store, orderId, it, 'qwen-max');
+    await failItem(store, orderId, it, 'doubao-pro');
     openDecision(store, orderId, it);
     const r = await executeRefundChoice(store, orderId, it, new SandboxChannel());
     assert.equal(r.refunded_cash_cents, 800);
@@ -79,9 +79,9 @@ test('M5-3 选退款：现金单退现金 / 纯券单发补偿券（T7/§2.4/§5
   }
   {
     const vch = { voucher_id: 'vch_m5a', remaining_cents: 800, expires_at: '2026-06-30' };
-    const { store, dir, orderId, items } = await paidOrder(['kimi'], [vch]);
+    const { store, dir, orderId, items } = await paidOrder(['kimi-k3'], [vch]);
     const it = items[0].item_id;
-    await failItem(store, orderId, it, 'kimi');
+    await failItem(store, orderId, it, 'kimi-k3');
     openDecision(store, orderId, it);
     const r = await executeRefundChoice(store, orderId, it, new SandboxChannel());
     assert.equal(r.refunded_cash_cents, 0);
@@ -96,16 +96,16 @@ test('M5-3 选退款：现金单退现金 / 纯券单发补偿券（T7/§2.4/§5
 });
 
 test('M5-4 换贵模型：补差200→后继锁定→履约→REPLACED，E1=0（T9/T11）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['qwen-max']);
+  const { store, dir, orderId, items } = await paidOrder(['doubao-pro']);
   const it = items[0].item_id;
-  await failItem(store, orderId, it, 'qwen-max');
+  await failItem(store, orderId, it, 'doubao-pro');
   openDecision(store, orderId, it);
-  const r = await executeReplaceChoice(store, orderId, it, 'gpt-4o', new SandboxChannel());
+  const r = await executeReplaceChoice(store, orderId, it, 'minimax-m3', new SandboxChannel());
   assert.equal(r.carryover.cash_delta_cents, 200);
   const h1 = store.getOrder(orderId);
   assert.equal(projectItems(h1).get(it).state, 'REPLACED');
   assert.equal(projectItems(h1).get(r.successor_item_id).state, 'LOCKED');
-  const fr = await fulfillItem(store, orderId, r.successor_item_id, 'gpt-4o', new OkAdapter('res_F'), { backoffMs: 0 });
+  const fr = await fulfillItem(store, orderId, r.successor_item_id, 'minimax-m3', new OkAdapter('res_F'), { backoffMs: 0 });
   assert.equal(fr.completed, true);
   const h2 = store.getOrder(orderId);
   assert.equal(projectOrder(h2), 'DELIVERED');
@@ -117,16 +117,16 @@ test('M5-4 换贵模型：补差200→后继锁定→履约→REPLACED，E1=0（
 });
 
 test('M5-5 换便宜模型：自动退差400→后继履约→REPLACED，E1=0（§2.5）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['gpt-4o']);
+  const { store, dir, orderId, items } = await paidOrder(['minimax-m3']);
   const it = items[0].item_id;
-  await failItem(store, orderId, it, 'gpt-4o');
+  await failItem(store, orderId, it, 'minimax-m3');
   openDecision(store, orderId, it);
-  const r = await executeReplaceChoice(store, orderId, it, 'deepseek-v3', new SandboxChannel());
+  const r = await executeReplaceChoice(store, orderId, it, 'deepseek-v41', new SandboxChannel());
   assert.equal(r.carryover.cash_delta_cents, -400);   // 1000 → 600
   const h1 = store.getOrder(orderId);
   assert.ok(h1.some(e => e.type === 'REFUND_EXECUTED' && e.amount_cents === 400 && e.data.kind === 'REPLACE_DELTA_REFUND'));
   assert.equal(projectItems(h1).get(it).state, 'REPLACED');
-  await fulfillItem(store, orderId, r.successor_item_id, 'deepseek-v3', new OkAdapter('res_ds'), { backoffMs: 0 });
+  await fulfillItem(store, orderId, r.successor_item_id, 'deepseek-v41', new OkAdapter('res_ds'), { backoffMs: 0 });
   const h2 = store.getOrder(orderId);
   assert.equal(projectOrder(h2), 'DELIVERED');
   const e1 = E1(h2);
@@ -137,9 +137,9 @@ test('M5-5 换便宜模型：自动退差400→后继履约→REPLACED，E1=0（
 });
 
 test('M5-6 决策超时：自动全额退款 TIMEOUT_REFUNDED（T10）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['kimi']);
+  const { store, dir, orderId, items } = await paidOrder(['kimi-k3']);
   const it = items[0].item_id;
-  await failItem(store, orderId, it, 'kimi');
+  await failItem(store, orderId, it, 'kimi-k3');
   openDecision(store, orderId, it);
   const r = await executeTimeout(store, orderId, it, new SandboxChannel());
   assert.equal(r.refunded_cash_cents, 800);
@@ -167,18 +167,18 @@ test('M5-7 领券继续：全额发券 VOUCHERED（T8）', async () => {
 
 test('M5-8 券换便宜模型：券溢余200发回 + E1=0（券8→6 场景）', async () => {
   const vch = { voucher_id: 'vch_m5b', remaining_cents: 800, expires_at: '2026-06-30' };
-  const { store, dir, orderId, items } = await paidOrder(['kimi'], [vch]);
+  const { store, dir, orderId, items } = await paidOrder(['kimi-k3'], [vch]);
   const it = items[0].item_id;
-  await failItem(store, orderId, it, 'kimi');
+  await failItem(store, orderId, it, 'kimi-k3');
   openDecision(store, orderId, it);
-  const r = await executeReplaceChoice(store, orderId, it, 'deepseek-v3', new SandboxChannel());
+  const r = await executeReplaceChoice(store, orderId, it, 'deepseek-v41', new SandboxChannel());
   assert.equal(r.carryover.credit_surplus_cents, 200);
   assert.equal(r.carryover.cash_delta_cents, 0);
   const h = store.getOrder(orderId);
   const surplus = h.filter(e => e.type === 'VOUCHER_ISSUED' && e.data.source === 'CARRYOVER_SURPLUS');
   assert.equal(surplus.length, 1);
   assert.equal(surplus[0].data.face_value_cents, 200);
-  await fulfillItem(store, orderId, r.successor_item_id, 'deepseek-v3', new OkAdapter(), { backoffMs: 0 });
+  await fulfillItem(store, orderId, r.successor_item_id, 'deepseek-v41', new OkAdapter(), { backoffMs: 0 });
   const h2 = store.getOrder(orderId);
   assert.equal(projectOrder(h2), 'DELIVERED');
   assert.equal(E1(h2).diff, 0);
@@ -186,9 +186,9 @@ test('M5-8 券换便宜模型：券溢余200发回 + E1=0（券8→6 场景）',
 });
 
 test('M5-9 退款渠道失败→重试：复用义务新 operation 成功，义务只生效一次（I2/§5.4）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['qwen-max']);
+  const { store, dir, orderId, items } = await paidOrder(['doubao-pro']);
   const it = items[0].item_id;
-  await failItem(store, orderId, it, 'qwen-max');
+  await failItem(store, orderId, it, 'doubao-pro');
   openDecision(store, orderId, it);
   const ch = new SandboxChannel(['FAILED']);
   await assert.rejects(() => executeRefundChoice(store, orderId, it, ch), e => e.code === 'REFUND_STUCK');
@@ -206,9 +206,9 @@ test('M5-9 退款渠道失败→重试：复用义务新 operation 成功，义�
 
 test('M5-10 券账本 I7：多来源券全生命周期守恒（§6.7）', async () => {
   const vch = { voucher_id: 'vch_m5c', remaining_cents: 800, expires_at: '2026-06-30' };
-  const { store, dir, orderId, items } = await paidOrder(['kimi'], [vch]);
+  const { store, dir, orderId, items } = await paidOrder(['kimi-k3'], [vch]);
   const it = items[0].item_id;
-  await failItem(store, orderId, it, 'kimi');
+  await failItem(store, orderId, it, 'kimi-k3');
   openDecision(store, orderId, it);
   executeVoucherChoice(store, orderId, it);
   const events = [

@@ -26,7 +26,7 @@ const driveToCompletion = (store, orderId, history, items) => {
 
 test('M3-4 沙箱收款正常链 + E1 守恒 = 0', async () => {
   const { dir, store } = fresh();
-  const q = createQuote(store, { user_id: 'u_1', model_ids: ['gpt-4o', 'deepseek-v3'] });
+  const q = createQuote(store, { user_id: 'u_1', model_ids: ['minimax-m3', 'deepseek-v41'] });
   assert.equal(q.total_cents, 1600);
   const r = await confirmPayment(store, q.order_id, { channel: new SandboxChannel() });
   assert.equal(r.cash_paid_cents, 1600);
@@ -46,7 +46,7 @@ test('M3-4 沙箱收款正常链 + E1 守恒 = 0', async () => {
 test('M3-5 券混合支付：funding_split 落账 + VOUCHER_REDEEMED 明细 + E1 = 0', async () => {
   const { dir, store } = fresh();
   const vch = { voucher_id: 'vch_t1', remaining_cents: 1600, expires_at: '2026-06-30' };
-  const q = createQuote(store, { user_id: 'u_1', model_ids: ['deepseek-v3', 'qwen-max', 'kimi'], vouchers: [vch] });
+  const q = createQuote(store, { user_id: 'u_1', model_ids: ['deepseek-v41', 'doubao-pro', 'kimi-k3'], vouchers: [vch] });
   assert.equal(q.total_cents, 2200);
   const r = await confirmPayment(store, q.order_id, { channel: new SandboxChannel(), vouchers: [vch] });
   assert.equal(r.cash_paid_cents, 600);
@@ -67,7 +67,7 @@ test('M3-6 报价过期：锁价窗口外确认 → 作废 + 额度释放（§5.
   const { dir, store } = fresh();
   const vch = { voucher_id: 'vch_t2', remaining_cents: 800, expires_at: '2026-06-30' };
   const q = createQuote(store,
-    { user_id: 'u_1', model_ids: ['qwen-max'], vouchers: [vch], now: new Date('2025-09-12T10:00:00Z') });
+    { user_id: 'u_1', model_ids: ['doubao-pro'], vouchers: [vch], now: new Date('2025-09-12T10:00:00Z') });
   assert.equal(q.expires_at, '2025-09-12T10:15:00.000Z');
   await assert.rejects(
     () => confirmPayment(store, q.order_id,
@@ -85,7 +85,7 @@ test('M3-6 报价过期：锁价窗口外确认 → 作废 + 额度释放（§5.
 test('M3-7 支付失败→重试：新 operation，旧 FAILED 不阻塞（§5.1）', async () => {
   const { dir, store } = fresh();
   const ch = new SandboxChannel(['FAILED', 'SUCCEEDED']);
-  const q = createQuote(store, { user_id: 'u_1', model_ids: ['kimi', 'doubao-pro'] });
+  const q = createQuote(store, { user_id: 'u_1', model_ids: ['kimi-k3', 'doubao-pro'] });
   await assert.rejects(() => confirmPayment(store, q.order_id, { channel: ch }),
     e => e.code === 'PAYMENT_DECLINED');
   let h = store.getOrder(q.order_id);
@@ -107,7 +107,7 @@ test('M3-7 支付失败→重试：新 operation，旧 FAILED 不阻塞（§5.1�
 test('M3-8 UNKNOWN→查询定案：双通道自动收敛（§5.2）', async () => {
   const { dir, store } = fresh();
   const ch = new SandboxChannel(['UNKNOWN']);
-  const q = createQuote(store, { user_id: 'u_1', model_ids: ['glm-4-plus'] });
+  const q = createQuote(store, { user_id: 'u_1', model_ids: ['doubao-pro'] });
   const r = await confirmPayment(store, q.order_id, { channel: ch });
   assert.equal(r.status, 'FULFILLING');
   const h = store.getOrder(q.order_id);
@@ -120,7 +120,7 @@ test('M3-8 UNKNOWN→查询定案：双通道自动收敛（§5.2）', async () 
 test('M3-9 业务幂等：重复确认被拒；通道同 operation_id 重放同结果（I2）', async () => {
   const { dir, store } = fresh();
   const ch = new SandboxChannel();
-  const q = createQuote(store, { user_id: 'u_1', model_ids: ['deepseek-v3'] });
+  const q = createQuote(store, { user_id: 'u_1', model_ids: ['deepseek-v41'] });
   await confirmPayment(store, q.order_id, { channel: ch });
   await assert.rejects(() => confirmPayment(store, q.order_id, { channel: ch }),
     e => e.code === 'ALREADY_CONFIRMED');

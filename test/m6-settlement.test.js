@@ -34,14 +34,14 @@ const HOUR = 3600_000;
 
 test('M6-1 金样本：5模型 ¥39.90 → 1换1退 → 预演逐字段 + balance=0（§7.2）', async () => {
   const { store, dir, orderId, items } = await paidOrder(
-    ['kimi', 'kimi', 'kimi', 'kimi', 'kimi'], 3990);
-  for (const i of [0, 2, 4]) await ok(store, orderId, items[i].item_id, 'kimi', 'res_' + i);
-  await fail(store, orderId, items[1].item_id, 'kimi');
+    ['kimi-k3', 'kimi-k3', 'kimi-k3', 'kimi-k3', 'kimi-k3'], 3990);
+  for (const i of [0, 2, 4]) await ok(store, orderId, items[i].item_id, 'kimi-k3', 'res_' + i);
+  await fail(store, orderId, items[1].item_id, 'kimi-k3');
   openDecision(store, orderId, items[1].item_id);
-  const rep = await executeReplaceChoice(store, orderId, items[1].item_id, 'gpt-4o', new SandboxChannel());
+  const rep = await executeReplaceChoice(store, orderId, items[1].item_id, 'minimax-m3', new SandboxChannel());
   assert.equal(rep.carryover.cash_delta_cents, 202);      // 1000 − 798
-  await ok(store, orderId, rep.successor_item_id, 'gpt-4o', 'res_succ');
-  await fail(store, orderId, items[3].item_id, 'kimi');
+  await ok(store, orderId, rep.successor_item_id, 'minimax-m3', 'res_succ');
+  await fail(store, orderId, items[3].item_id, 'kimi-k3');
   openDecision(store, orderId, items[3].item_id);
   await executeRefundChoice(store, orderId, items[3].item_id, new SandboxChannel());
 
@@ -62,9 +62,9 @@ test('M6-1 金样本：5模型 ¥39.90 → 1换1退 → 预演逐字段 + balanc
 });
 
 test('M6-2 I3：义务未执行被拦；执行后通过（§7.1 E3）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['qwen-max']);
+  const { store, dir, orderId, items } = await paidOrder(['doubao-pro']);
   const it = items[0].item_id;
-  await fail(store, orderId, it, 'qwen-max');
+  await fail(store, orderId, it, 'doubao-pro');
   openDecision(store, orderId, it);
   await assert.rejects(() => executeRefundChoice(store, orderId, it, new SandboxChannel(['FAILED'])),
     e => e.code === 'REFUND_STUCK');
@@ -77,8 +77,8 @@ test('M6-2 I3：义务未执行被拦；执行后通过（§7.1 E3）', async ()
 });
 
 test('M6-3 finalize 三关：无预演被拒 / 72h 未满被拒 / 期满落账带hash（§7.3/§7.4）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['kimi', 'doubao-pro']);
-  await ok(store, orderId, items[0].item_id, 'kimi');
+  const { store, dir, orderId, items } = await paidOrder(['kimi-k3', 'doubao-pro']);
+  await ok(store, orderId, items[0].item_id, 'kimi-k3');
   await ok(store, orderId, items[1].item_id, 'doubao-pro');
   assert.throws(() => finalizeSettlement(store, orderId, { now: new Date(Date.now() + 80 * HOUR) }),
     e => e.code === 'NO_PREVIEW');
@@ -93,8 +93,8 @@ test('M6-3 finalize 三关：无预演被拒 / 72h 未满被拒 / 期满落账�
 });
 
 test('M6-4 异议：DISPUTED 冻结 finalize → 解决 → 落账；第3次异议转人工（§7.3）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['kimi', 'doubao-pro']);
-  await ok(store, orderId, items[0].item_id, 'kimi');
+  const { store, dir, orderId, items } = await paidOrder(['kimi-k3', 'doubao-pro']);
+  await ok(store, orderId, items[0].item_id, 'kimi-k3');
   await ok(store, orderId, items[1].item_id, 'doubao-pro');
   previewSettlement(store, orderId);
   raiseObjection(store, orderId, { scope: 'itm_all', reason: '对退款金额有疑问' });
@@ -112,10 +112,10 @@ test('M6-4 异议：DISPUTED 冻结 finalize → 解决 → 落账；第3次异�
 });
 
 test('M6-5 无交付物结算：全退 → delivered=0 / final_due=0 / balance=0（§7.5）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['kimi', 'doubao-pro']);
+  const { store, dir, orderId, items } = await paidOrder(['kimi-k3', 'doubao-pro']);
   for (const idx of [0, 1]) {
     const it = items[idx].item_id;
-    await fail(store, orderId, it, ['kimi', 'doubao-pro'][idx]);
+    await fail(store, orderId, it, ['kimi-k3', 'doubao-pro'][idx]);
     openDecision(store, orderId, it);
     await executeTimeout(store, orderId, it, new SandboxChannel());
   }
@@ -131,9 +131,9 @@ test('M6-5 无交付物结算：全退 → delivered=0 / final_due=0 / balance=0
 });
 
 test('M6-6 券过期任务：未到期不动作 / 到期作废留痕 / 重跑幂等 / I7 守恒（§6.6/§6.7）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['kimi']);
+  const { store, dir, orderId, items } = await paidOrder(['kimi-k3']);
   const it = items[0].item_id;
-  await fail(store, orderId, it, 'kimi');
+  await fail(store, orderId, it, 'kimi-k3');
   openDecision(store, orderId, it);
   const r = executeVoucherChoiceM6(store, orderId, it);
   const vid = r.voucher_id;
@@ -156,8 +156,8 @@ test('M6-6 券过期任务：未到期不动作 / 到期作废留痕 / 重跑幂
 import { executeVoucherChoice as executeVoucherChoiceM6 } from '../src/decisions.js';
 
 test('M6-7 I3 拦截未决渠道操作；操作收敛后放行（§5.1×§7.1）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['kimi', 'doubao-pro']);
-  await ok(store, orderId, items[0].item_id, 'kimi');
+  const { store, dir, orderId, items } = await paidOrder(['kimi-k3', 'doubao-pro']);
+  await ok(store, orderId, items[0].item_id, 'kimi-k3');
   await ok(store, orderId, items[1].item_id, 'doubao-pro');
   previewSettlement(store, orderId);
   const op = genOperationId('payment', orderId);
@@ -172,8 +172,8 @@ test('M6-7 I3 拦截未决渠道操作；操作收敛后放行（§5.1×§7.1）
 });
 
 test('M6-8 预演前置：存在未终态 item 时拒绝预演（§7.3）', async () => {
-  const { store, dir, orderId, items } = await paidOrder(['kimi', 'doubao-pro']);
-  await ok(store, orderId, items[0].item_id, 'kimi');
+  const { store, dir, orderId, items } = await paidOrder(['kimi-k3', 'doubao-pro']);
+  await ok(store, orderId, items[0].item_id, 'kimi-k3');
   assert.throws(() => previewSettlement(store, orderId), e => e.code === 'NOT_SETTLEMENT_READY');
   cleanup(store, dir);
 });

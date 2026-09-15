@@ -28,10 +28,10 @@ const fail = (store, orderId, itemId, modelId) =>
 
 test('M7-1 决策超时扫描：到期自动退款，重跑幂等（T10）', async () => {
   const { store, dir } = fresh();
-  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi'] });
+  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi-k3'] });
   await confirmPayment(store, q.order_id, { channel: new SandboxChannel() });
   const it = q.items[0].item_id;
-  await fail(store, q.order_id, it, 'kimi');
+  await fail(store, q.order_id, it, 'kimi-k3');
   openDecision(store, q.order_id, it, new Date(Date.now() - 25 * HOUR));
   const ch = new SandboxChannel();
   const fired = await scanDecisionTimeouts(store, ch);
@@ -46,10 +46,10 @@ test('M7-1 决策超时扫描：到期自动退款，重跑幂等（T10）', asy
 
 test('M7-2 补差窗口扫描：后继 VOIDED + 前驱自动退款（T12→T10）', async () => {
   const { store, dir } = fresh();
-  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi'] });
+  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi-k3'] });
   await confirmPayment(store, q.order_id, { channel: new SandboxChannel() });
   const it = q.items[0].item_id;
-  await fail(store, q.order_id, it, 'kimi');
+  await fail(store, q.order_id, it, 'kimi-k3');
   openDecision(store, q.order_id, it);
   // 模拟"选了换贵模型但补差始终未付"：REPLACE 决策 + SURCHARGE_DUE（真实流水中二者都存在）
   appendGuarded(store, q.order_id, store.getOrder(q.order_id),
@@ -70,7 +70,7 @@ test('M7-2 补差窗口扫描：后继 VOIDED + 前驱自动退款（T12→T10�
 
 test('M7-3 结算自动落地：72h 后 FINALIZED，重跑幂等（§7.3）', async () => {
   const { store, dir } = fresh();
-  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi', 'doubao-pro'] });
+  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi-k3', 'doubao-pro'] });
   await confirmPayment(store, q.order_id, { channel: new SandboxChannel() });
   for (const it of q.items)
     await fulfillItem(store, q.order_id, it.item_id, it.model_id,
@@ -85,7 +85,7 @@ test('M7-3 结算自动落地：72h 后 FINALIZED，重跑幂等（§7.3）', as
 
 test('M7-4 runCycle 全周期 + 对账四类差异检出（§5.5）', async () => {
   const { store, dir } = fresh();
-  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi'] });
+  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi-k3'] });
   await confirmPayment(store, q.order_id, { channel: new SandboxChannel() });
   const cycle = await runCycle(store, new SandboxChannel());
   assert.equal(cycle.errors.length, 0);
@@ -108,7 +108,7 @@ test('M7-4 runCycle 全周期 + 对账四类差异检出（§5.5）', async () =
 
 test('M7-5 巡检：健康库零违例（§8.5/§9.5 重放）', async () => {
   const { store, dir } = fresh();
-  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi', 'doubao-pro'] });
+  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi-k3', 'doubao-pro'] });
   await confirmPayment(store, q.order_id, { channel: new SandboxChannel() });
   for (const it of q.items)
     await fulfillItem(store, q.order_id, it.item_id, it.model_id,
@@ -122,10 +122,10 @@ test('M7-5 巡检：健康库零违例（§8.5/§9.5 重放）', async () => {
 
 test('M7-6 admin 退款重试 + GOODWILL 限额（≤实付50%）+ 双审开关（§8.2–8.4）', async () => {
   const { store, dir } = fresh();
-  const q = createQuote(store, { user_id: 'u7', model_ids: ['qwen-max'] });
+  const q = createQuote(store, { user_id: 'u7', model_ids: ['doubao-pro'] });
   await confirmPayment(store, q.order_id, { channel: new SandboxChannel() });
   const it = q.items[0].item_id;
-  await fail(store, q.order_id, it, 'qwen-max');
+  await fail(store, q.order_id, it, 'doubao-pro');
   openDecision(store, q.order_id, it);
   const ch = new SandboxChannel(['FAILED']);
   await assert.rejects(() => import('../src/decisions.js').then(m => m.executeRefundChoice(store, q.order_id, it, ch)),
@@ -153,7 +153,7 @@ test('M7-6 admin 退款重试 + GOODWILL 限额（≤实付50%）+ 双审开关�
 test('M7-7 支付未决出池：渠道收敛后人工确认，订单完整成立（§8.2①）', async () => {
   const { store, dir } = fresh();
   const ch = new SandboxChannel(['UNKNOWN'], { stickyUnknown: true });
-  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi'] });
+  const q = createQuote(store, { user_id: 'u7', model_ids: ['kimi-k3'] });
   await assert.rejects(() => confirmPayment(store, q.order_id, { channel: ch }),
     e => e.code === 'PAYMENT_UNKNOWN');
   assert.equal(store.getOrder(q.order_id).filter(e => e.type === 'ORDER_CONFIRMED').length, 0);

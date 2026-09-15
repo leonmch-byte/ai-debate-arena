@@ -15,18 +15,21 @@ import { PRICE_TABLES, PRICE_TABLE_VERSION } from './src/config.js';
 import { buildCollisionReport } from './src/collision.js';
 import { RealAdapter } from './src/adapters-real.js';
 import { Auth } from './src/auth.js';
+import { Registry } from './src/registry.js';
 import { Growth } from './src/growth.js';
 
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.md': 'text/plain; charset=utf-8' };
 
-export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulateFail = [], log = (...a) => console.log(...a) } = {}) {
+export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulateFail = [], betaMode = null, log = (...a) => console.log(...a) } = {}) {
   const store = new EventStore(dbPath);
   const channel = new SandboxChannel();
   const auth = new Auth(store);
   const growth = new Growth(store);
+  if (opts.betaMode) growth.set('BETA_MODE', opts.betaMode);
+  const registry = new Registry(store);
 
-  const realAdapter = new RealAdapter({ log });
+  const realAdapter = new RealAdapter({ log, registry });
   const adapter = process.env.ARENA_ADAPTER === 'real' ? realAdapter : {
     async run(model_id, input = {}) {
       if (simulateFail.includes(model_id))
@@ -141,7 +144,7 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
     req.on('data', d => { s += d; if (s.length > 1e6) req.destroy(); });
     req.on('end', () => {
       if (!s) return resolve({});
-      try { resolve(JSON.parse(s)); } catch { reject(new StoreError('BAD_JSON', 'invalid JSON')); }
+      try { resolve(JSON.parse(s)); } catch { log('READBODY RAW:', JSON.stringify(s.slice(0, 300))); reject(new StoreError('BAD_JSON', 'invalid JSON: ' + s.slice(0, 80))); }
     });
     req.on('error', reject);
   });
@@ -153,8 +156,11 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
       let m;
       if (req.method === 'GET' && url.pathname === '/api/health')
         return send(200, { ok: true, orders: store.getAllOrderIds().filter(x => x !== 'ord_system').length });
-      if (req.method === 'GET' && url.pathname === '/api/models')
-        return send(200, { price_table_version: PRICE_TABLE_VERSION, models: PRICE_TABLES[PRICE_TABLE_VERSION].models });
+      if (req.method === 'GET' && url.pathname === '/api/models') {
+        const cat = { ...PRICE_TABLES[PRICE_TABLE_VERSION].models };
+        for (const m of registry.listModels(true)) if (!(m.id in cat)) cat[m.id] = m.price_cents;
+        return send(200, { price_table_version: PRICE_TABLE_VERSION, models: cat });
+      }
 
       if (req.method === 'POST' && url.pathname === '/api/auth/register') {
         const day = new Date().toISOString().slice(0, 10);
@@ -217,6 +223,23 @@ export async function startServer({ port = 3100, dbPath = 'db/arena.db', simulat
           invites_used: store.db.prepare("SELECT COUNT(*) AS n FROM invites WHERE day = ? AND used_by IS NOT NULL").get(day).n,
           feedback_stats: growth.feedbackStats(),
         });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/admin/models') {
+        const u = sessionUser(req);
+        const isLocal = ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+        if (!u && !isLocal) return send(401, { error: 'LOGIN_REQUIRED' });
+        return send(200, { models: registry.listModels(false) });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/admin/models') {
+        const u = sessionUser(req);
+        const isLocal = ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+        if (!u && !isLocal) return send(401, { error: 'LOGIN_REQUIRED' });
+        try {
+          const saved = registry.upsertModel({ id: body.id, display_name: body.display_name,
+            provider: body.provider, endpoint: body.endpoint ?? null, model_tag: body.model_tag ?? null,
+            price_cents: body.price_cents ?? 800, enabled: body.enabled ?? true });
+          return send(200, { ok: true, model: saved });
+        } catch (e) { return send(400, { error: 'MODEL_INVALID', message: e.message }); }
       }
       if (req.method === 'POST' && url.pathname === '/api/admin/beta-mode') {
         const u = sessionUser(req);

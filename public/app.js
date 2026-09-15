@@ -19,6 +19,7 @@ const ENGINE_POOL = ['doubao-pro','kimi-k3','deepseek-v41','minimax-m3']; // 真
 let poll = null, ME = null, MODELS = {};
 
 async function api(path, opts = {}) {
+  if (opts.body && typeof opts.body !== 'string') opts.body = JSON.stringify(opts.body);
   const r = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error((j.error ?? 'HTTP ' + r.status) + ' ' + (j.message ?? ''));
@@ -263,9 +264,96 @@ async function renderOrder(v, orderId) {
       <div style="display:flex;gap:12px;margin-top:16px">
         <button class="ghost" style="padding:9px 18px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--muted);font-family:inherit;cursor:pointer" onclick="location.hash='';boot()">← 发起新的风暴</button>
         <button class="ghost" style="padding:9px 18px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--muted);font-family:inherit;cursor:pointer" onclick="feedbackModal('${orderId}')">💡 出问题了？</button>
+        <button class="ghost" style="padding:9px 18px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--muted);font-family:inherit;cursor:pointer" onclick="exportReport('${orderId}')">⬇ 导出报告</button>
       </div>
     </section>`;
   if (v.decision) showModal(v.decision, orderId); else hideModal();
+}
+async function exportReport(orderId) {
+  const fmt = await pickFormat();
+  if (!fmt) return;
+  const v = await api(`/api/orders/${orderId}`);
+  const topic = sessionStorage.getItem('topic_' + orderId) ?? '';
+  const roleNames = JSON.parse(sessionStorage.getItem('roles_' + orderId) ?? '[]');
+  const zh = st => ({ COMPLETED:'✓ 已交方案', REFUNDED:'已退款', TIMEOUT_REFUNDED:'超时自动退款', REPLACED:'已更换', VOUCHERED:'已转额度', RUNNING:'思考中' }[st] ?? st);
+  const L = [];
+  const W = t => L.push(t);
+  W('多 AI 头脑风暴报告'); W('='.repeat(30)); W('');
+  W(`订单：${orderId}`);
+  if (topic) W(`议题：${topic}`);
+  W(`状态：${ORDER_ZH[v.status] ?? v.status}`); W('');
+  if (v.collision) {
+    W('【碰撞报告】');
+    (v.collision.disagreements ?? []).forEach(d => { W(`◆ 分歧：${d.topic}`); d.stances.forEach(x => W(`   ${x.model}：${x.snippet}…`)); });
+    (v.collision.holes ?? []).forEach(h => W(`◆ 漏洞（${h.raised_by}）：${h.point}`));
+    (v.collision.consensuses ?? []).forEach(k => W(`◆ 共识：${k.topic}（${k.stances.length} 位一致）`));
+    W('');
+  }
+  for (let i = 0; i < v.items.length; i++) {
+    const it = v.items[i];
+    const role = roleNames[i] ?? it.model_id;
+    W(`【${role}（${it.model_id}）】${zh(it.state)} · ${yuan(it.locked_price_cents)}`);
+    const text = await fetchResult(it.result_ref);
+    if (text) { W(text); } else { W('（该顾问未产出内容）'); }
+    W('');
+  }
+  if (v.settlement) {
+    W('【账单】');
+    W(`订单总额：${yuan(v.settlement.order_total_locked_cents)}`);
+    if (v.settlement.refunded_cash_cents) W(`已退款：${yuan(v.settlement.refunded_cash_cents)}`);
+    W(`最终应收：${yuan(v.settlement.final_due_cents)}`);
+    W(`balance：${v.settlement.balance_cents}`); W('');
+  }
+  W('—');
+  W(`由「多 AI 头脑风暴」生成 · ${new Date().toLocaleString('zh-CN')}`);
+  const content = L.join('\n');
+  if (fmt === 'txt') {
+    const plain = content.replace(/[#*`]/g, '');
+    downloadBlob(new Blob([plain], { type: 'text/plain;charset=utf-8' }), `头脑风暴报告-${orderId}.txt`);
+  } else if (fmt === 'docx') {
+    // HTML 包 .doc：Word/WPS 完美打开，保留标题与结构
+    const html = `<html xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>body{font-family:'微软雅黑',sans-serif;font-size:14px;line-height:1.8}h1{font-size:20px}h2{font-size:16px;border-bottom:1px solid #ccc;padding-bottom:4px}h3{font-size:14px}</style></head><body>${mdToHtml(content)}</body></html>`;
+    downloadBlob(new Blob([html], { type: 'application/msword;charset=utf-8' }), `头脑风暴报告-${orderId}.doc`);
+  } else if (fmt === 'pdf') {
+    // 打印视图 → 用户"另存为 PDF"（零依赖最可靠方案）
+    const w = window.open('', '_blank');
+    w.document.write(`<html><head><meta charset="utf-8"><title>头脑风暴报告-${orderId}</title><style>body{font-family:'微软雅黑',sans-serif;font-size:14px;line-height:1.9;max-width:700px;margin:0 auto;padding:20px}h1{font-size:20px}h2{font-size:16px;border-bottom:1px solid #ccc;padding-bottom:4px}</style></head><body>${mdToHtml(content)}</body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  } else {
+    downloadBlob(new Blob([content], { type: 'text/markdown;charset=utf-8' }), `头脑风暴报告-${orderId}.md`);
+  }
+}
+function downloadBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+function pickFormat() {
+  return new Promise(resolve => {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(26,22,48,.5);display:flex;align-items:center;justify-content:center;z-index:99';
+    el.innerHTML = `<div style="background:#fff;border-radius:16px;padding:24px;width:90%;max-width:380px;font-family:inherit">
+      <h3 style="margin:0 0 14px;font-size:16px">选择导出格式</h3>
+      ${[['md','Markdown','笔记软件 / 开发者'],['txt','纯文本','微信直接发送'],['docx','Word 文档','办公 / 存档'],['pdf','PDF','打印 / 正式转发']]
+        .map(f => `<div style="border:1px solid #e3e6ec;border-radius:10px;padding:12px 16px;margin:8px 0;cursor:pointer" onmouseover="this.style.borderColor='#7c3aed'" onmouseout="this.style.borderColor='#e3e6ec'" onclick="window.__pickFmt('${f[0]}')"><b>${f[1]}</b><span style="color:#6b6887;font-size:12px;margin-left:10px">${f[2]}</span></div>`).join('')}
+      <div style="text-align:center;margin-top:10px"><button style="border:none;background:none;color:#6b6887;cursor:pointer;font-size:13px" onclick="window.__pickFmt(null)">取消</button></div>
+    </div>`;
+    window.__pickFmt = v => { el.remove(); window.__pickFmt = null; resolve(v); };
+    document.body.appendChild(el);
+  });
+}
+function mdToHtml(md) {
+  const escH = t => t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return md.split('\n').map(line => {
+    if (line.startsWith('# ')) return `<h1>${escH(line.slice(2))}</h1>`;
+    if (line.startsWith('## ')) return `<h2>${escH(line.slice(3))}</h2>`;
+    if (line.startsWith('### ')) return `<h3>${escH(line.slice(4))}</h3>`;
+    if (line.startsWith('- ') || line.startsWith('◆ ')) return `<li>${escH(line.slice(2))}</li>`;
+    if (line === '---') return '<hr>';
+    if (!line.trim()) return '<br>';
+    return `<p>${escH(line)}</p>`;
+  }).join('\n');
 }
 function collisionCard(c) {
   const block = (t, cls, arr, fmt) => arr.length ? `<div class="col-block ${cls}"><h4 class="serif">${t}</h4>${arr.map(fmt).join('')}</div>` : '';

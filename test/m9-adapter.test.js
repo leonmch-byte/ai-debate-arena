@@ -17,6 +17,6 @@ test('M9-2 未映射模型：RESPONSE_INVALID 拒绝', async () => {
 test('M9-3 阿里未配置：qwen 返回 AUTH_FAILURE（火山独立，不受影响）', async () => {
   delete process.env.DASHSCOPE_API_KEY;
   const a = new RealAdapter({ env: {} });
-  const r = await a.run('qwen-max', {});
+  const r = await a.run('doubao-pro', {});
   assert.equal(r.reason_code, 'MODEL_AUTH_FAILURE');
 });

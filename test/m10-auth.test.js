@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startServer } from '../server.js';
 
-const fresh = async () => {
+const fresh = async (betaMode = 'false') => {
   const dir = mkdtempSync(join(tmpdir(), 'arena-m10-'));
-  const srv = await startServer({ port: 0, dbPath: join(dir, 't.db') });
+  const srv = await startServer({ port: 0, dbPath: join(dir, 't.db'), betaMode });
   const base = `http://127.0.0.1:${srv.server.address().port}`;
   let cookie = null;
   const call = async (path, { method = 'POST', body } = {}) => {
@@ -30,9 +30,9 @@ const EMAIL = () => `u${Date.now()}${Math.floor(Math.random() * 1e5)}@test.local
 
 test('M10-1a 强制登录开关：ARENA_REQUIRE_AUTH=1 时未登录报价 → 401', async t => {
   process.env.ARENA_REQUIRE_AUTH = '1';
-  const x = await fresh();
+  const x = await fresh('true');
   t.after(() => { delete process.env.ARENA_REQUIRE_AUTH; return teardown(x); });
-  const r = await x.call('/api/quote', { body: { model_ids: ['kimi'] } });
+  const r = await x.call('/api/quote', { body: { model_ids: ['kimi-k3'] } });
   assert.equal(r.code, 401);
   assert.equal(r.data.error, 'LOGIN_REQUIRED');
 });
@@ -41,7 +41,7 @@ test('M10-1b 默认（开关关闭）：匿名报价放行 200——用户决策
   assert.equal(process.env.ARENA_REQUIRE_AUTH, undefined);
   const x = await fresh();
   t.after(() => teardown(x));
-  const r = await x.call('/api/quote', { body: { model_ids: ['kimi'] } });
+  const r = await x.call('/api/quote', { body: { model_ids: ['kimi-k3'] } });
   assert.equal(r.code, 200);
 });
 
@@ -55,7 +55,7 @@ test('M10-2 注册→报价→我的订单可见；错密码/重复邮箱被拒'
   assert.equal(bad.data.error, 'BAD_CREDENTIALS');
   const me = await x.call('/api/auth/me', { method: 'GET' });
   assert.equal(me.data.user.email, email);
-  const q = await x.call('/api/quote', { body: { model_ids: ['kimi'] } });
+  const q = await x.call('/api/quote', { body: { model_ids: ['kimi-k3'] } });
   assert.equal(q.code, 200);
   const mine = await x.call('/api/my/orders', { method: 'GET' });
   assert.equal(mine.data.orders.length, 1);
