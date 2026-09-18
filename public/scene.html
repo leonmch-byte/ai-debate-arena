@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>场景推演 · 和老板谈加薪</title>
+<style>
+:root{--bg:#f6f4fb;--card:#fff;--text:#1a1630;--muted:#6b6887;--accent:#7c3aed;--accent2:#0891b2;--border:rgba(26,22,48,.08);--ok:#188554;--bad:#c93b3b}
+*{box-sizing:border-box}
+body{margin:0;font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text)}
+.serif{font-family:'Songti SC','SimSun',serif}
+.top{background:linear-gradient(100deg,var(--accent),var(--accent2));color:#fff;padding:18px 24px}
+.top .t1{font-size:18px;font-weight:800}.top .t2{font-size:12.5px;opacity:.85;margin-top:2px}
+main{max-width:720px;margin:0 auto;padding:24px 16px 90px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:16px;box-shadow:0 4px 16px rgba(26,22,48,.05)}
+.frow{margin:14px 0}.frow label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+.frow small{color:var(--muted);font-weight:400;margin-left:6px}
+.frow textarea,.frow input{width:100%;border:1px solid var(--border);border-radius:10px;padding:11px 13px;font:14px/1.6 inherit;background:#fbfcff}
+.frow textarea:focus,.frow input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,58,237,.1)}
+.btn{background:linear-gradient(100deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:12px;padding:13px 30px;font:700 15px inherit;cursor:pointer;box-shadow:0 8px 24px rgba(124,58,237,.3)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:#fff;color:var(--muted);box-shadow:none;border:1px solid var(--border)}
+.chat{display:flex;flex-direction:column;gap:14px}
+.msg{max-width:85%;padding:13px 17px;border-radius:16px;font-size:14.5px;line-height:1.8;white-space:pre-wrap}
+.msg.boss{background:var(--accent2-soft,rgba(8,145,178,.08));border:1px solid rgba(8,145,178,.2);align-self:flex-start;border-top-left-radius:4px}
+.msg.user{background:linear-gradient(100deg,var(--accent),var(--accent2));color:#fff;align-self:flex-end;border-top-right-radius:4px}
+.msg .who{font-size:11.5px;color:var(--muted);margin-bottom:4px;font-weight:600}
+.msg.user .who{color:rgba(255,255,255,.75)}
+.opts{display:flex;flex-direction:column;gap:8px;margin:6px 0}
+.opt{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 16px;cursor:pointer;font-size:14px;text-align:left;font-family:inherit;transition:all .15s}
+.opt:hover{border-color:var(--accent);background:rgba(124,58,237,.05)}
+.free{display:flex;gap:10px;margin-top:14px}
+.free textarea{flex:1;border:1px solid var(--border);border-radius:12px;padding:12px;font:14px inherit;resize:none;height:52px}
+.free textarea:focus{outline:none;border-color:var(--accent)}
+.sys{font-size:12px;color:var(--muted);text-align:center;margin:8px 0}
+.status{background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 16px;font-size:12.5px;color:var(--muted)}
+.err{color:var(--bad);font-size:13px}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="t1 serif">场景推演 · 和老板谈加薪</div>
+  <div class="t2">重要的事情，先演一遍 —— 老板/HR 均由真实 AI 扮演，各有自己的立场</div>
+</div>
+<main>
+  <div id="setup" class="card">
+    <h3 class="serif" style="margin:0 0 4px">先把你的现实情况告诉系统</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 8px">系统按四类记录：事实 / 你的判断 / 你指定的假设 / 未知。AI 不会质疑你设定的假设。</p>
+    <div class="frow"><label>事实 <small>确定发生的事</small></label><textarea id="f-facts" rows="2" placeholder="例：两年没涨薪；刚完成一个大项目；手头有个核心模块离了我转不动"></textarea></div>
+    <div class="frow"><label>你的判断 <small>你认为是这样，但没证实</small></label><textarea id="f-judgments" rows="2" placeholder="例：我觉得老板挺器重我"></textarea></div>
+    <div class="frow"><label>指定假设 <small>模拟条件，系统按此执行</small></label><textarea id="f-assumptions" rows="2" placeholder="例：假设老板不知道我在看机会"></textarea></div>
+    <div class="frow"><label>未知 <small>双方都不确定的</small></label><textarea id="f-unknowns" rows="2" placeholder="例：不知道今年调薪池还有没有"></textarea></div>
+    <div style="text-align:center;margin-top:18px">
+      <button class="btn" id="startBtn" style="padding:13px 40px">进入场景</button>
+      <span class="err" id="s-err"></span>
+    </div>
+  </div>
+  <div id="chatArea" style="display:none">
+    <div class="status" id="sceneStatus">推演进行中 · 每一步都计入账本，可回溯</div>
+    <div class="chat card" id="chatBox" style="min-height:200px"></div>
+    <div class="opts" id="optBox"></div>
+    <div class="free">
+      <textarea id="freeInput" placeholder="或者直接输入你想说的话…"></textarea>
+      <button class="btn" id="sendBtn" style="padding:0 22px">发送</button>
+    </div>
+    <p style="text-align:center;margin-top:16px"><button class="btn ghost" onclick="location.href='/'">← 退出场景</button></p>
+  </div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const NAMES = { boss:'老板', hr:'HR 主管', user:'你' };
+let orderId = null, busy = false;
+
+function addMsg(actor, text) {
+  const cls = actor === 'user' ? 'user' : 'boss';
+  const who = actor === 'user' ? '你' : NAMES[actor] ?? actor;
+  $('#chatBox').insertAdjacentHTML('beforeend',
+    `<div class="msg ${cls}"><div class="who">${esc(who)}</div>${esc(text)}</div>`);
+  $('#chatBox').scrollTop = $('#chatBox').scrollHeight;
+}
+async function api(p, body) {
+  const r = await fetch(p, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body ?? {}) });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(j.message ?? j.error ?? 'HTTP '+r.status);
+  return j;
+}
+async function sendTurn(text, actor = 'user') {
+  if (busy) return; busy = true;
+  if (actor === 'user' && text) addMsg('user', text);
+  $('#optBox').innerHTML = '';
+  $('#sendBtn').disabled = true;
+  const think = $('#chatBox').insertAdjacentHTML('beforeend', '<div class="msg boss" id="thinking"><div class="who">老板</div><span class="typing">领导沉吟了一会儿…</span></div>');
+  try {
+    const r = await api(`/api/scenario/${orderId}/turn`, { actor: actor === 'user' ? 'user' : actor, text: actor === 'user' ? text : null });
+    $('#thinking')?.remove();
+    if (actor !== 'user') addMsg(actor, r.text);
+    if (actor === 'user') {
+      // 用户发言后，老板回应
+      const r2 = await api(`/api/scenario/${orderId}/turn`, { actor: 'boss', text: null });
+      addMsg('boss', r2.text);
+      renderOpts(r2.options);
+    } else {
+      // 老板自动回应（开场后），生成选项
+      renderOpts(r.options);
+    }
+  } catch (e) {
+    $('#thinking')?.remove();
+    $('#chatBox').insertAdjacentHTML('beforeend', `<p class="err" style="text-align:center">${esc(e.message)}</p>`);
+  }
+  $('#sendBtn').disabled = false; busy = false;
+}
+function renderOpts(opts) {
+  if (!opts || !opts.length) return;
+  $('#optBox').innerHTML = '<div class="sys">↓ 你可能想说的</div>' + opts.map(o =>
+    `<button class="opt" onclick="document.getElementById('freeInput').value=this.textContent;sendFree()">${esc(o)}</button>`).join('');
+}
+async function sendFree() {
+  const v = $('#freeInput').value.trim();
+  if (!v || busy) return;
+  $('#freeInput').value = '';
+  await sendTurn(v, 'user');
+}
+ $('#startBtn').onclick = async () => {
+  const collect = id => $('#'+id).value.trim().split(/[；;\n]+/).map(x=>x.trim()).filter(x=>x);
+  $('#s-err').textContent = '';
+  try {
+    $('#startBtn').disabled = true;
+    const st = await api('/api/scenario/start', { scenario_id: 'salary-talk', situation: {
+      facts: collect('f-facts'), judgments: collect('f-judgments'),
+      assumptions: collect('f-assumptions'), unknowns: collect('f-unknowns') } });
+    orderId = st.order_id;
+    $('#setup').style.display = 'none';
+    $('#chatArea').style.display = 'block';
+    $('#chatBox').innerHTML = '';
+    addMsg('boss', st.opening.text);
+    renderOpts(['我想谈谈加薪的事情。','领导，我最近在思考自己接下来的发展。','（沉默，等老板先说）']);
+  } catch (e) { $('#s-err').textContent = e.message; $('#startBtn').disabled = false; }
+};
+ $('#sendBtn').onclick = sendFree;
+</script>
+</body>
+</html>

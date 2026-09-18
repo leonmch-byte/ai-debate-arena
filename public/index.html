@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多 AI 头脑风暴 · 兼听则明</title>
+<style>
+:root{--bg:#f6f4fb;--card:#fff;--text:#1a1630;--muted:#6b6887;--accent:#7c3aed;--accent-soft:rgba(124,58,237,.12);--accent2:#0891b2;--accent2-soft:rgba(8,145,178,.12);--border:rgba(26,22,48,.08);--ok:#188554;--bad:#c93b3b}
+*{box-sizing:border-box}
+body{margin:0;font-family:'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;min-height:100vh}
+.serif{font-family:'Songti SC','Noto Serif SC','SimSun',serif}
+.grad-text{background:linear-gradient(100deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.grad-btn{background:linear-gradient(100deg,var(--accent),var(--accent2));color:#fff;transition:transform .2s,box-shadow .2s;box-shadow:0 8px 24px rgba(124,58,237,.35);cursor:pointer}
+.grad-btn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(124,58,237,.45)}
+.grad-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.glass{background:rgba(255,255,255,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.feature-card{transition:transform .25s,box-shadow .25s;border:1px solid var(--border)}
+.feature-card:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(124,58,237,.12)}
+.ai-card{cursor:pointer;transition:all .2s;border:2px solid var(--border);background:var(--card);position:relative}
+.ai-card:hover{border-color:rgba(124,58,237,.4);transform:translateY(-2px)}
+.ai-card.selected{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 3px rgba(124,58,237,.15)}
+.ai-card.selected .ai-check{opacity:1;transform:scale(1)}
+.ai-check{opacity:0;transform:scale(.5);transition:all .2s}
+.input-focus:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px rgba(124,58,237,.12)}
+.tag-pill{font-size:12.5px;font-weight:600;padding:5px 14px;border-radius:999px;background:#fff;border:1px solid var(--border)}
+.grid-bg{background-image:linear-gradient(rgba(124,58,237,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(124,58,237,.06) 1px,transparent 1px);background-size:40px 40px}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none}
+.modal{position:fixed;inset:0;background:rgba(26,22,48,.5);display:flex;align-items:center;justify-content:center;z-index:60}
+.modal.hidden{display:none}
+.modal-card{background:#fff;border-radius:18px;padding:28px;max-width:480px;width:92%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(26,22,48,.3)}
+.frow{margin:12px 0}.frow label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
+.frow input{width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:14px inherit;background:#fbfcfe}
+.frow input:focus{outline:none;border-color:var(--accent)}
+table{width:100%;border-collapse:collapse;margin:10px 0}
+td,th{padding:9px 4px;border-bottom:1px solid var(--border);text-align:left;font-size:14px}
+tr.total td{font-weight:700;border-top:2px solid var(--border)}
+.hidden{display:none!important}
+.err{color:var(--bad);font-size:13px}
+.opinion{border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin:14px 0;background:#fff}
+.op-head{display:flex;gap:12px;align-items:baseline}
+.st-COMPLETED{color:var(--ok);font-weight:600}.st-FAILED_FINAL{color:var(--bad);font-weight:600}.st-RUNNING{color:var(--pri,var(--accent));font-weight:600}
+.op-body{white-space:pre-wrap;word-break:break-word;font:14px/1.9 inherit;margin:10px 0 0;color:#3a4256}
+.typing::after{content:'▍';animation:blink 1s infinite}@keyframes blink{50%{opacity:0}}
+.collision{background:linear-gradient(135deg,#fff8ee,#fff);border:1px solid #f0d9b5;border-radius:14px;padding:16px 20px;margin:0 0 18px}
+.collision h4{margin:12px 0 6px;font-size:14px}
+.col-dis h4{color:#b26a00}.col-hole h4{color:var(--bad)}.col-con h4{color:var(--ok)}
+.pt{padding:6px 0;border-bottom:1px dashed var(--border);font-size:14px}.pt:last-child{border-bottom:none}
+.snip{color:var(--muted);font-size:13px;padding-left:12px}
+.snip i,.pt i{color:var(--accent);font-style:normal;font-size:12px}
+.settle{border-top:1px dashed var(--border);margin-top:16px;padding-top:12px}
+.paid-ok{text-align:center;padding:30px 20px}
+.paid-mark{font-size:36px;color:var(--ok);font-weight:800}
+.topic-show{background:var(--accent-soft);border-left:4px solid var(--accent);border-radius:8px;padding:12px 16px;margin:0 0 16px;font-size:15px}
+.topic-show .lbl{font-size:12px;color:var(--muted);display:block;margin-bottom:2px}
+.step{display:flex;align-items:center;gap:10px;flex:1}
+.step-dot{width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+.step-dot.idle{background:#e8e6f0;color:var(--muted)}
+.step-line{height:2px;flex:1;margin:0 10px;background:linear-gradient(90deg,var(--accent),#e8e6f0)}
+.fb-tag{display:inline-block;padding:8px 14px;border-radius:10px;border:1px solid var(--border);margin:4px;cursor:pointer;font-size:13px}
+.fb-tag:hover,.fb-tag.sel{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+@media (max-width:640px){main{padding:16px 12px 60px}}
+</style>
+</head>
+<body>
+<div style="position:relative;min-height:100vh">
+  <div class="orb" style="width:420px;height:420px;background:rgba(124,58,237,.16);top:-120px;right:-80px"></div>
+  <div class="orb" style="width:360px;height:360px;background:rgba(8,145,178,.13);top:200px;left:-120px"></div>
+
+  <nav class="glass" style="position:sticky;top:0;z-index:40;border-bottom:1px solid var(--border)">
+    <div style="max-width:1120px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="location.hash='';boot()">
+        <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <span style="font-weight:800;font-size:17px">多 AI 头脑风暴</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a id="nav-orders" class="hidden" style="color:var(--muted);text-decoration:none;font-size:14px;cursor:pointer" onclick="location.hash='#/orders'">我的订单</a>
+        <span id="auth-box" style="font-size:14px"></span>
+      </div>
+    </div>
+  </nav>
+
+  <main style="max-width:1120px;margin:0 auto;padding:48px 24px 80px;position:relative;z-index:1"><div id="app"></div></main>
+
+  <div id="modal" class="modal hidden"><div class="modal-card" id="modal-card"></div></div>
+  <script src="/app.js"></script>
+</div>
+</body>
+</html>

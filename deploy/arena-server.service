@@ -1,0 +1,17 @@
+[Unit]
+Description=ai-debate-arena v3 server (HTTP API + web)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ai-debate-arena-v3
+ExecStart=/home/ubuntu/.nvm/versions/node/v22.23.2/bin/node server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=ARENA_PORT=3100
+Environment=ARENA_DB=/home/ubuntu/ai-debate-arena-v3/db/arena.db
+
+[Install]
+WantedBy=multi-user.target
